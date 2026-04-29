@@ -41,6 +41,15 @@ $routes->group('admin', function($routes) {
         $routes->get('podcasts', 'Admin\PodcastController::index');
         $routes->get('podcasts/wizard', 'Admin\PodcastController::wizard');
         $routes->post('podcasts/store', 'Admin\PodcastController::store');
+
+
+        // Podcasts
+        $routes->get('podcasts', 'Admin\PodcastController::index');
+        $routes->get('podcasts/wizard', 'Admin\PodcastController::wizard');
+        $routes->get('podcasts/edit/(:num)', 'Admin\PodcastController::edit/$1'); // NEW
+        $routes->post('podcasts/save', 'Admin\PodcastController::save'); // RENAMED FROM STORE
+        $routes->post('podcasts/save/(:num)', 'Admin\PodcastController::save/$1'); // NEW
+        $routes->get('podcasts/delete/(:num)', 'Admin\PodcastController::delete/$1'); // NEW
     });
 
     

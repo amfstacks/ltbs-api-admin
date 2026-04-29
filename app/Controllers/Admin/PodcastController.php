@@ -38,7 +38,7 @@ class PodcastController extends BaseController
     }
 
     // Opens the Wizard
-    public function wizard()
+    public function wizard_old()
     {
         // We need this data for the dropdown menus!
         $categoryModel = new CategoryModel();
@@ -56,6 +56,20 @@ class PodcastController extends BaseController
         return view('admin/podcasts/wizard', $data);
     }
 
+private function getWizardData()
+    {
+        return [
+            'categories' => (new CategoryModel())->findAll(),
+            'themes'     => (new ThemeModel())->findAll(),
+            'authors'    => (new UserModel())->whereIn('role', ['author', 'superadmin'])->findAll(),
+        ];
+    }
+    public function wizard()
+    {
+        $data = $this->getWizardData();
+        $data['title'] = 'Upload New Podcast';
+        return view('admin/podcasts/wizard', $data);
+    }
     // Processes the Final Submission
     public function store()
     {
@@ -122,5 +136,99 @@ class PodcastController extends BaseController
         }
 
         return redirect()->to('admin/podcasts')->with('success', 'Podcast published successfully!');
+    }
+
+    public function edit($id)
+    {
+        $podcast = $this->podcastModel->find($id);
+        if (!$podcast) return redirect()->to('admin/podcasts')->with('error', 'Podcast not found.');
+
+        // Get authorship data to pre-fill the form
+        $authorModel = new PodcastAuthorModel();
+        $primaryAuthor = $authorModel->where('podcast_id', $id)->where('is_primary', 1)->first();
+        
+        $data = $this->getWizardData();
+        $data['title'] = 'Edit Podcast';
+        $data['podcast'] = $podcast;
+        $data['primary_author_id'] = $primaryAuthor ? $primaryAuthor['author_id'] : '';
+        
+        return view('admin/podcasts/wizard', $data);
+    }
+
+    public function save($id = null)
+    {
+        $db = \Config\Database::connect();
+        $db->transStart();
+
+        $title = $this->request->getPost('title');
+        
+        $podcastData = [
+            'title'           => $title,
+            'description'     => $this->request->getPost('description'),
+            'category_id'     => $this->request->getPost('category_id'),
+            'theme_id'        => $this->request->getPost('theme_id') ?: null,
+            'media_high_url'  => $this->request->getPost('media_high_url'), 
+            'media_low_url'   => $this->request->getPost('media_low_url'),
+            'status'          => $this->request->getPost('status'),
+        ];
+
+        // Only generate a new slug and set creator if it's a NEW upload
+        if (!$id) {
+            $podcastData['slug'] = strtolower(url_title($title)) . '-' . time();
+            $podcastData['created_by'] = session()->get('user_id');
+            $podcastData['published_at'] = $this->request->getPost('status') === 'published' ? date('Y-m-d H:i:s') : null;
+        }
+
+        // Handle Cover Image Upload
+        $file = $this->request->getFile('cover_image');
+        if ($file && $file->isValid() && !$file->hasMoved()) {
+            $newName = $file->getRandomName();
+            $file->move(FCPATH . 'uploads/covers', $newName);
+            $podcastData['cover_image_url'] = 'uploads/covers/' . $newName;
+        }
+
+        // Save or Update Podcast
+        if ($id) {
+            $this->podcastModel->update($id, $podcastData);
+            $podcastId = $id;
+        } else {
+            $podcastId = $this->podcastModel->insert($podcastData);
+        }
+
+        // Handle Authorship (Delete old authors and re-insert to keep it clean)
+        $authorModel = new PodcastAuthorModel();
+        if ($id) {
+            $authorModel->where('podcast_id', $id)->delete(); 
+        }
+
+        $primaryAuthorId = $this->request->getPost('primary_author_id');
+        $authorModel->insert(['podcast_id' => $podcastId, 'author_id' => $primaryAuthorId, 'is_primary' => 1, 'can_edit' => 1]);
+
+        $coAuthors = $this->request->getPost('co_authors') ?? [];
+        foreach ($coAuthors as $coAuthorId) {
+            if ($coAuthorId != $primaryAuthorId) {
+                $authorModel->insert([
+                    'podcast_id' => $podcastId, 
+                    'author_id' => $coAuthorId, 
+                    'is_primary' => 0, 
+                    'can_edit' => $this->request->getPost('co_authors_can_edit') ? 1 : 0
+                ]);
+            }
+        }
+
+        $db->transComplete();
+
+        if ($db->transStatus() === false) {
+            return redirect()->back()->withInput()->with('error', 'An error occurred while saving.');
+        }
+
+        return redirect()->to('admin/podcasts')->with('success', $id ? 'Podcast updated successfully!' : 'Podcast published successfully!');
+    }
+
+    // Safely Soft-Deletes the Podcast
+    public function delete($id)
+    {
+        $this->podcastModel->delete($id);
+        return redirect()->to('admin/podcasts')->with('success', 'Podcast deleted successfully.');
     }
 }

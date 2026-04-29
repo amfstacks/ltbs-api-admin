@@ -83,11 +83,11 @@
                             <?php endif; ?>
                         </td>
 
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <a href="#" class="text-blue-600 hover:text-blue-900 mr-4 transition-colors" title="Edit">
+                       <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <a href="<?= site_url('admin/podcasts/edit/' . $podcast['id']) ?>" class="text-blue-600 hover:text-blue-900 mr-4 transition-colors" title="Edit">
                                 <i class="ph ph-pencil-simple text-lg"></i>
                             </a>
-                            <a href="#" onclick="return confirm('Are you sure you want to delete this teaching?');" class="text-red-600 hover:text-red-900 transition-colors" title="Delete">
+                            <a href="<?= site_url('admin/podcasts/delete/' . $podcast['id']) ?>" onclick="return confirm('Are you sure you want to delete this teaching?');" class="text-red-600 hover:text-red-900 transition-colors" title="Delete">
                                 <i class="ph ph-trash text-lg"></i>
                             </a>
                         </td>

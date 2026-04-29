@@ -12,10 +12,10 @@
     errorMessage: '',
     
     // Variables to track our compulsory fields
-    title: '',
-    categoryId: '',
-    mediaHighUrl: '',
-    primaryAuthorId: '<?= session()->get('user_id') ?>',
+   title: '<?= isset($podcast) ? esc($podcast['title'], 'js') : '' ?>',
+    categoryId: '<?= isset($podcast) ? $podcast['category_id'] : '' ?>',
+    mediaHighUrl: '<?= isset($podcast) ? esc($podcast['media_high_url'], 'js') : '' ?>',
+    primaryAuthorId: '<?= $primary_author_id ?? session()->get('user_id') ?>',
 
     // Validates before allowing the user to move to the next step
     nextStep() {
@@ -64,7 +64,8 @@
         <p x-text="errorMessage" class="text-sm font-medium"></p>
     </div>
 
-    <form action="<?= site_url('admin/podcasts/store') ?>" method="POST" enctype="multipart/form-data" class="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+    <!-- <form action="<?= site_url('admin/podcasts/store') ?>" method="POST" enctype="multipart/form-data" class="bg-white rounded-xl shadow-sm border border-gray-100 p-8"> -->
+        <form action="<?= site_url('admin/podcasts/save/' . ($podcast['id'] ?? '')) ?>" method="POST" enctype="multipart/form-data" class="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
         <?= csrf_field() ?>
 
         <div x-show="step === 1" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
@@ -80,7 +81,8 @@
                 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Description summary</label>
-                    <textarea name="description" rows="3"  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500"></textarea>
+                    <!-- <textarea name="description" rows="3"  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500"></textarea> -->
+                     <textarea name="description" rows="3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500"><?= isset($podcast) ? esc($podcast['description']) : '' ?></textarea>
                 </div>
 
                 <div class="grid grid-cols-2 gap-6">
