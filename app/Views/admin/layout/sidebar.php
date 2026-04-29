@@ -21,9 +21,13 @@
             Podcasts
         </a>
 
-        <a href="#" class="flex items-center px-3 py-2.5 rounded-lg transition-colors hover:bg-navy-800 hover:text-white">
+        <a href="<?= site_url('admin/categories') ?>" class="flex items-center px-3 py-2.5 rounded-lg transition-colors hover:bg-navy-800 hover:text-white">
             <i class="ph ph-folders text-xl mr-3 text-gray-400"></i>
-            Categories & Themes
+            Categories
+        </a>
+         <a href="<?= site_url('admin/themes') ?>" class="flex items-center px-3 py-2.5 rounded-lg transition-colors hover:bg-navy-800 hover:text-white">
+            <i class="ph ph-folders text-xl mr-3 text-gray-400"></i>
+Themes
         </a>
 
         <div class="pt-4 pb-1">
