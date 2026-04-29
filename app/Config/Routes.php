@@ -36,6 +36,11 @@ $routes->group('admin', function($routes) {
         $routes->post('themes/save', 'Admin\ThemeController::save');
         $routes->post('themes/save/(:num)', 'Admin\ThemeController::save/$1');
         $routes->get('themes/delete/(:num)', 'Admin\ThemeController::delete/$1');
+
+
+        $routes->get('podcasts', 'Admin\PodcastController::index');
+        $routes->get('podcasts/wizard', 'Admin\PodcastController::wizard');
+        $routes->post('podcasts/store', 'Admin\PodcastController::store');
     });
 
     

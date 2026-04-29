@@ -16,7 +16,7 @@
             <p class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Content</p>
         </div>
 
-        <a href="#" class="flex items-center px-3 py-2.5 rounded-lg transition-colors hover:bg-navy-800 hover:text-white">
+        <a href="<?=  site_url('admin/podcasts') ?>" class="flex items-center px-3 py-2.5 rounded-lg transition-colors hover:bg-navy-800 hover:text-white">
             <i class="ph ph-microphone-stage text-xl mr-3 text-gray-400"></i>
             Podcasts
         </a>
