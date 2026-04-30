@@ -14,6 +14,8 @@ $routes->group('admin', function($routes) {
     $routes->get('login', 'Admin\AuthController::index');
     $routes->post('login/authenticate', 'Admin\AuthController::authenticate');
     $routes->get('logout', 'Admin\AuthController::logout');
+    $routes->get('setup-password/(:segment)', 'Admin\AuthController::setupPassword/$1');
+    $routes->post('setup-password/save', 'Admin\AuthController::savePassword');
 
     // Protected Routes (Requires AdminFilter)
     $routes->group('', ['filter' => 'adminAuth'], function($routes) {
@@ -50,6 +52,18 @@ $routes->group('admin', function($routes) {
         $routes->post('podcasts/save', 'Admin\PodcastController::save'); // RENAMED FROM STORE
         $routes->post('podcasts/save/(:num)', 'Admin\PodcastController::save/$1'); // NEW
         $routes->get('podcasts/delete/(:num)', 'Admin\PodcastController::delete/$1'); // NEW
+
+
+        $routes->get('users', 'Admin\UserController::index');
+        $routes->get('users/create', 'Admin\UserController::create');
+        $routes->post('users/store', 'Admin\UserController::store');
+
+
+        // Forum
+        $routes->get('forum', 'Admin\ForumController::index');
+        $routes->get('forum/view/(:num)', 'Admin\ForumController::view/$1');
+        $routes->get('forum/api/replies/(:num)', 'Admin\ForumController::fetchReplies/$1');
+        $routes->post('forum/reply/(:num)', 'Admin\ForumController::reply/$1');
     });
 
     

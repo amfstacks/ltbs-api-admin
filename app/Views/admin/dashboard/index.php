@@ -1,5 +1,4 @@
 <?= $this->extend('admin/layout/master') ?>
-
 <?= $this->section('content') ?>
 
 <div class="mb-8">
@@ -10,12 +9,23 @@
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
     
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
+        <div class="p-3 rounded-lg bg-gold-50 text-gold-500 mr-4">
+            <i class="ph-fill ph-microphone-stage text-2xl"></i>
+        </div>
+        <div>
+            <p class="text-sm font-medium text-gray-500">Your Podcasts</p>
+            <h3 class="text-2xl font-bold text-navy-900"><?= $totalPodcasts ?></h3>
+        </div>
+    </div>
+
+    <!-- Keep these as placeholders for future API integration -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
         <div class="p-3 rounded-lg bg-blue-50 text-blue-600 mr-4">
             <i class="ph-fill ph-headphones text-2xl"></i>
         </div>
         <div>
             <p class="text-sm font-medium text-gray-500">Total Listens</p>
-            <h3 class="text-2xl font-bold text-navy-900">24,592</h3>
+            <h3 class="text-2xl font-bold text-navy-900">--</h3>
         </div>
     </div>
 
@@ -25,17 +35,7 @@
         </div>
         <div>
             <p class="text-sm font-medium text-gray-500">Active App Users</p>
-            <h3 class="text-2xl font-bold text-navy-900">1,204</h3>
-        </div>
-    </div>
-
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-        <div class="p-3 rounded-lg bg-gold-50 text-gold-500 mr-4">
-            <i class="ph-fill ph-microphone-stage text-2xl"></i>
-        </div>
-        <div>
-            <p class="text-sm font-medium text-gray-500">Published Podcasts</p>
-            <h3 class="text-2xl font-bold text-navy-900">86</h3>
+            <h3 class="text-2xl font-bold text-navy-900">--</h3>
         </div>
     </div>
 
@@ -45,21 +45,58 @@
         </div>
         <div>
             <p class="text-sm font-medium text-gray-500">Forum Discussions</p>
-            <h3 class="text-2xl font-bold text-navy-900">342</h3>
+            <h3 class="text-2xl font-bold text-navy-900">--</h3>
         </div>
     </div>
 
 </div>
 
+<!-- Recent Uploads Table -->
 <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
     <div class="flex justify-between items-center mb-4">
         <h2 class="text-lg font-bold text-navy-900">Recent Uploads</h2>
-        <a href="#" class="text-sm font-medium text-gold-500 hover:text-gold-600">View All</a>
+        <a href="<?= site_url('admin/podcasts') ?>" class="text-sm font-medium text-gold-500 hover:text-gold-600">View All</a>
     </div>
-    <div class="text-center py-12 text-gray-400">
-        <i class="ph ph-folder-open text-4xl mb-2"></i>
-        <p>No podcasts uploaded yet. The data table will appear here.</p>
-    </div>
+    
+    <?php if(empty($recentPodcasts)): ?>
+        <div class="text-center py-12 text-gray-400">
+            <i class="ph ph-folder-open text-4xl mb-2"></i>
+            <p>No podcasts uploaded yet. Click 'View All' to add your first teaching.</p>
+        </div>
+    <?php else: ?>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-100">
+                <tbody>
+                    <?php foreach($recentPodcasts as $pod): ?>
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="py-3 whitespace-nowrap">
+                                <div class="flex items-center">
+                                    <div class="h-10 w-10 rounded bg-navy-900 flex items-center justify-center overflow-hidden mr-3">
+                                        <?php if($pod['cover_image_url']): ?>
+                                            <img src="<?= base_url($pod['cover_image_url']) ?>" class="h-full w-full object-cover">
+                                        <?php else: ?>
+                                            <i class="ph-fill ph-book-open text-gold-400"></i>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-bold text-navy-900"><?= esc($pod['title']) ?></p>
+                                        <p class="text-xs text-gray-500"><?= esc($pod['category_name']) ?></p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="py-3 text-right">
+                                <?php if($pod['status'] === 'published'): ?>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Published</span>
+                                <?php else: ?>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">Draft</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
 </div>
 
 <?= $this->endSection() ?>

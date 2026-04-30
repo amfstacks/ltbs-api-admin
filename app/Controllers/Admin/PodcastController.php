@@ -20,8 +20,32 @@ class PodcastController extends BaseController
     }
 
     // Displays the list of podcasts
-    // Displays the list of podcasts
     public function index()
+    {
+        $userId = session()->get('user_id');
+        $role = session()->get('role');
+
+        $builder = $this->podcastModel
+            ->select('podcasts.*, categories.name as category_name')
+            ->join('categories', 'categories.id = podcasts.category_id', 'left');
+
+        // Apply Author restriction via the pivot table
+        if ($role === 'author') {
+            $builder->join('podcast_authors', 'podcast_authors.podcast_id = podcasts.id')
+                    ->where('podcast_authors.author_id', $userId)
+                    ->groupBy('podcasts.id');
+        }
+
+        $podcasts = $builder->orderBy('podcasts.created_at', 'DESC')->findAll();
+
+        $data = [
+            'title'    => 'Manage Podcasts',
+            'podcasts' => $podcasts
+        ];
+        return view('admin/podcasts/index', $data);
+    }
+    // Displays the list of podcasts
+    public function index_old()
     {
         // We use a JOIN to grab the Category name elegantly
         $podcasts = $this->podcastModel
