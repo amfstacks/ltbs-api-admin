@@ -95,7 +95,7 @@ private function getWizardData()
         return view('admin/podcasts/wizard', $data);
     }
     // Processes the Final Submission
-    public function store()
+    public function store_old()
     {
         $db = \Config\Database::connect();
         $db->transStart(); // Start Database Transaction for safety
@@ -162,6 +162,88 @@ private function getWizardData()
         return redirect()->to('admin/podcasts')->with('success', 'Podcast published successfully!');
     }
 
+    public function store()
+    {
+        $db = \Config\Database::connect();
+        $db->transStart(); // Start Database Transaction for safety
+
+        $title = $this->request->getPost('title');
+        
+        // 1. Initialize Podcast Data
+        $podcastData = [
+            'title'           => $title,
+            'slug'            => strtolower(url_title($title)) . '-' . time(), // Ensure uniqueness
+            'description'     => $this->request->getPost('description'),
+            'category_id'     => $this->request->getPost('category_id'),
+            'theme_id'        => $this->request->getPost('theme_id'),
+            // Assuming direct URL input for audio for now
+            'media_high_url'  => $this->request->getPost('media_high_url'), 
+            'media_low_url'   => $this->request->getPost('media_low_url'),
+            'status'          => $this->request->getPost('status'),
+            'published_at'    => $this->request->getPost('status') === 'published' ? date('Y-m-d H:i:s') : null,
+            'created_by'      => session()->get('user_id'),
+        ];
+
+        // --------------------------------------------------------------------
+        // CLOUDFLARE R2: Handle Cover Image Upload
+        // --------------------------------------------------------------------
+        $file = $this->request->getFile('cover_image');
+        if ($file && $file->isValid() && !$file->hasMoved()) {
+            
+            // Call our custom library
+            $cloudflare = new \App\Libraries\CloudflareStorage();
+            
+            // Upload to the 'podcasts/covers' folder in your R2 bucket
+            $coverUrl = $cloudflare->upload($file, 'podcasts/covers');
+            
+            if ($coverUrl) {
+                // Success! Save the public Cloudflare URL to the database
+                $podcastData['cover_image_url'] = $coverUrl;
+            } else {
+                // If the cloud upload fails, abort the database save!
+                $db->transRollback();
+                return redirect()->back()->withInput()->with('error', 'Failed to upload cover image to the cloud. Please try again.');
+            }
+        }
+
+        // Insert the main podcast record
+        $podcastId = $this->podcastModel->insert($podcastData);
+
+        // 2. Save Authorship (Primary)
+        $authorModel = new \App\Models\PodcastAuthorModel(); // Make sure this is imported at the top, or fully qualified here
+        $primaryAuthorId = $this->request->getPost('primary_author_id');
+        
+        $authorModel->insert([
+            'podcast_id' => $podcastId,
+            'author_id'  => $primaryAuthorId,
+            'is_primary' => 1,
+            'can_edit'   => 1
+        ]);
+
+        // 3. Save Co-Authors (If any)
+        $coAuthors = $this->request->getPost('co_authors'); // Array of IDs
+        if (!empty($coAuthors)) {
+            foreach ($coAuthors as $coAuthorId) {
+                if ($coAuthorId != $primaryAuthorId) { // Prevent duplicate primary
+                    $authorModel->insert([
+                        'podcast_id' => $podcastId,
+                        'author_id'  => $coAuthorId,
+                        'is_primary' => 0,
+                        'can_edit'   => $this->request->getPost('co_authors_can_edit') ? 1 : 0
+                    ]);
+                }
+            }
+        }
+
+        $db->transComplete(); // Commit Database Transaction
+
+        if ($db->transStatus() === false) {
+            return redirect()->back()->withInput()->with('error', 'An error occurred while saving the database records.');
+        }
+
+        return redirect()->to('admin/podcasts')->with('success', 'Podcast published successfully!');
+    }
+
     public function edit($id)
     {
         $podcast = $this->podcastModel->find($id);
@@ -179,7 +261,7 @@ private function getWizardData()
         return view('admin/podcasts/wizard', $data);
     }
 
-    public function save($id = null)
+    public function save_old($id = null)
     {
         $db = \Config\Database::connect();
         $db->transStart();
@@ -241,6 +323,108 @@ private function getWizardData()
         }
 
         $db->transComplete();
+
+        if ($db->transStatus() === false) {
+            return redirect()->back()->withInput()->with('error', 'An error occurred while saving.');
+        }
+
+        return redirect()->to('admin/podcasts')->with('success', $id ? 'Podcast updated successfully!' : 'Podcast published successfully!');
+    }
+
+    public function save($id = null)
+    {
+        $db = \Config\Database::connect();
+        $db->transStart(); // Start Database Transaction for safety
+
+        $title = $this->request->getPost('title');
+        
+        $podcastData = [
+            'title'           => $title,
+            'description'     => $this->request->getPost('description'),
+            'category_id'     => $this->request->getPost('category_id'),
+            'theme_id'        => $this->request->getPost('theme_id') ?: null,
+            'media_high_url'  => $this->request->getPost('media_high_url'), 
+            'media_low_url'   => $this->request->getPost('media_low_url'),
+            'status'          => $this->request->getPost('status'),
+        ];
+
+        // Only generate a new slug and set creator if it's a NEW upload
+        $oldPodcast = null;
+        // if (!$id) {
+        //     $podcastData['slug'] = strtolower(url_title($title)) . '-' . time();
+        //     $podcastData['created_by'] = session()->get('user_id');
+        //     $podcastData['published_at'] = $this->request->getPost('status') === 'published' ? date('Y-m-d H:i:s') : null;
+        // }
+
+        if ($id) {
+            $oldPodcast = $this->podcastModel->find($id);
+        } else {
+            // It's a new podcast
+            $podcastData['slug'] = strtolower(url_title($title)) . '-' . time();
+            $podcastData['created_by'] = session()->get('user_id');
+            $podcastData['published_at'] = $this->request->getPost('status') === 'published' ? date('Y-m-d H:i:s') : null;
+        }
+
+        // --------------------------------------------------------------------
+        // CLOUDFLARE R2: Handle Cover Image Upload
+        // --------------------------------------------------------------------
+        $file = $this->request->getFile('cover_image');
+        if ($file && $file->isValid() && !$file->hasMoved()) {
+            
+            // Initialize our Cloudflare Service
+            $cloudflare = new \App\Libraries\CloudflareStorage();
+            
+            // Upload to the 'podcasts/covers' folder
+            $coverUrl = $cloudflare->upload($file, 'podcasts/covers');
+            
+            if ($coverUrl) {
+                // Success! Assign the public Cloudflare URL
+                $podcastData['cover_image_url'] = $coverUrl;
+                if ($oldPodcast && !empty($oldPodcast['cover_image_url'])) {
+                    $cloudflare->delete($oldPodcast['cover_image_url']);
+                }
+            } else {
+                // Abort the entire database transaction if cloud upload fails
+                $db->transRollback();
+                return redirect()->back()->withInput()->with('error', 'Failed to upload cover image to the cloud. Please try again.');
+            }
+        }
+
+        // Save or Update Podcast Main Record
+        if ($id) {
+            $this->podcastModel->update($id, $podcastData);
+            $podcastId = $id;
+        } else {
+            $podcastId = $this->podcastModel->insert($podcastData);
+        }
+
+        // Handle Authorship (Delete old authors and re-insert to keep it clean)
+        $authorModel = new \App\Models\PodcastAuthorModel();
+        if ($id) {
+            $authorModel->where('podcast_id', $id)->delete(); 
+        }
+
+        $primaryAuthorId = $this->request->getPost('primary_author_id');
+        $authorModel->insert([
+            'podcast_id' => $podcastId, 
+            'author_id'  => $primaryAuthorId, 
+            'is_primary' => 1, 
+            'can_edit'   => 1
+        ]);
+
+        $coAuthors = $this->request->getPost('co_authors') ?? [];
+        foreach ($coAuthors as $coAuthorId) {
+            if ($coAuthorId != $primaryAuthorId) {
+                $authorModel->insert([
+                    'podcast_id' => $podcastId, 
+                    'author_id'  => $coAuthorId, 
+                    'is_primary' => 0, 
+                    'can_edit'   => $this->request->getPost('co_authors_can_edit') ? 1 : 0
+                ]);
+            }
+        }
+
+        $db->transComplete(); // Commit Database Transaction
 
         if ($db->transStatus() === false) {
             return redirect()->back()->withInput()->with('error', 'An error occurred while saving.');

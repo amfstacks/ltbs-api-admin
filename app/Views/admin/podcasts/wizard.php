@@ -16,7 +16,7 @@
     categoryId: '<?= isset($podcast) ? $podcast['category_id'] : '' ?>',
     mediaHighUrl: '<?= isset($podcast) ? esc($podcast['media_high_url'], 'js') : '' ?>',
     primaryAuthorId: '<?= $primary_author_id ?? session()->get('user_id') ?>',
-    coverImageUrl: '<?= isset($podcast) && $podcast['cover_image_url'] ? base_url($podcast['cover_image_url']) : '' ?>',
+coverImageUrl: '<?= isset($podcast) && !empty($podcast['cover_image_url']) ? (str_starts_with($podcast['cover_image_url'], 'http') ? esc($podcast['cover_image_url'], 'js') : base_url($podcast['cover_image_url'])) : '' ?>',
     // Validates before allowing the user to move to the next step
     nextStep() {
         this.errorMessage = ''; // Clear old errors

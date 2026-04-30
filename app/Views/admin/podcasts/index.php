@@ -41,7 +41,7 @@
                             <div class="flex items-center">
                                 <div class="flex-shrink-0 h-12 w-12 rounded-lg bg-navy-900 flex items-center justify-center overflow-hidden shadow-sm">
                                     <?php if($podcast['cover_image_url']): ?>
-                                        <img class="h-12 w-12 object-cover" src="<?= base_url($podcast['cover_image_url']) ?>" alt="Cover">
+                                        <img class="h-12 w-12 object-cover" src="<?= $podcast['cover_image_url'] ?>" alt="Cover">
                                     <?php else: ?>
                                         <i class="ph-fill ph-book-open text-gold-400 text-xl"></i>
                                     <?php endif; ?>

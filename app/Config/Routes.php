@@ -64,6 +64,8 @@ $routes->group('admin', function($routes) {
         $routes->get('forum/view/(:num)', 'Admin\ForumController::view/$1');
         $routes->get('forum/api/replies/(:num)', 'Admin\ForumController::fetchReplies/$1');
         $routes->post('forum/reply/(:num)', 'Admin\ForumController::reply/$1');
+        $routes->get('forum/podcast/(:num)', 'Admin\ForumController::podcast/$1'); // NEW
+
     });
 
     

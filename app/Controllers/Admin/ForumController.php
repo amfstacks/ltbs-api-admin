@@ -66,7 +66,7 @@ class ForumController extends BaseController
     // }
 
     // 1. The Inbox (With Unread Calculations)
-    public function index()
+    public function index_old()
     {
         $db = \Config\Database::connect();
         $userId = session()->get('user_id');
@@ -100,6 +100,94 @@ class ForumController extends BaseController
         ];
 
         return view('admin/forum/index', $data);
+    }
+
+    // 1. Level One: The Podcast Inbox
+    public function index()
+    {
+        $db = \Config\Database::connect();
+        $userId = session()->get('user_id');
+        $role = session()->get('role');
+
+        // We grab the Podcasts and calculate forum metrics on the fly!
+        $builder = $db->table('podcasts')
+            ->select("
+                podcasts.id, podcasts.title, podcasts.cover_image_url,
+                categories.name as category_name,
+                (SELECT COUNT(*) FROM forum_threads WHERE podcast_id = podcasts.id AND deleted_at IS NULL) as total_threads,
+                
+                -- The Magic Awaiting Reply Calculator!
+                (
+                    SELECT COUNT(*) FROM forum_threads ft
+                    WHERE ft.podcast_id = podcasts.id AND ft.deleted_at IS NULL
+                    AND (
+                        (SELECT COUNT(*) FROM forum_replies fr WHERE fr.thread_id = ft.id) = 0
+                        OR 
+                        (SELECT u.role FROM forum_replies fr2 JOIN users u ON u.id = fr2.user_id WHERE fr2.thread_id = ft.id ORDER BY fr2.created_at DESC LIMIT 1) = 'app_user'
+                    )
+                ) as awaiting_count
+            ")
+            ->join('categories', 'categories.id = podcasts.category_id', 'left')
+            ->where('podcasts.deleted_at', null);
+
+        if ($role === 'author') {
+            $builder->join('podcast_authors', 'podcast_authors.podcast_id = podcasts.id')
+                    ->where('podcast_authors.author_id', $userId);
+        }
+
+        // Order by the ones that need attention most!
+        $podcasts = $builder->having('total_threads >', 0)->orderBy('awaiting_count', 'DESC')->orderBy('total_threads', 'DESC')->get()->getResultArray();
+
+        $data = ['title' => 'Forum Dashboard', 'podcasts' => $podcasts];
+        return view('admin/forum/index', $data);
+    }
+
+    // 2. Level Two: The Ticketing System (Tabs)
+    public function podcast($podcastId)
+    {
+        $db = \Config\Database::connect();
+        $userId = session()->get('user_id');
+        $role = session()->get('role');
+
+        // RBAC Verification - Can this user see this podcast?
+        $podcastBuilder = $db->table('podcasts')->where('id', $podcastId);
+        if ($role === 'author') {
+            $podcastBuilder->join('podcast_authors', 'podcast_authors.podcast_id = podcasts.id')
+                           ->where('podcast_authors.author_id', $userId);
+        }
+        $podcast = $podcastBuilder->get()->getRowArray();
+        
+        if (!$podcast) return redirect()->to('admin/forum')->with('error', 'Podcast not found or access denied.');
+
+        // Fetch all threads for this podcast
+        $threads = $db->table('forum_threads')
+            ->select("
+                forum_threads.*,
+                users.first_name, users.last_name,
+                (SELECT COUNT(*) FROM forum_replies WHERE thread_id = forum_threads.id) as reply_count,
+                (SELECT u.role FROM forum_replies fr JOIN users u ON u.id = fr.user_id WHERE fr.thread_id = forum_threads.id ORDER BY fr.created_at DESC LIMIT 1) as last_replier_role
+            ")
+            ->join('users', 'users.id = forum_threads.user_id')
+            ->where('forum_threads.podcast_id', $podcastId)
+            ->where('forum_threads.deleted_at', null)
+            ->orderBy('forum_threads.updated_at', 'DESC')
+            ->get()->getResultArray();
+
+        // Let's attach our boolean logic so Alpine.js can filter the tabs instantly
+        $awaitingCount = 0;
+        foreach ($threads as &$t) {
+            $t['is_awaiting'] = ($t['reply_count'] == 0 || $t['last_replier_role'] === 'app_user');
+            if ($t['is_awaiting']) $awaitingCount++;
+        }
+
+        $data = [
+            'title'         => 'Discussions: ' . $podcast['title'],
+            'podcast'       => $podcast,
+            'threads'       => $threads,
+            'awaitingCount' => $awaitingCount
+        ];
+        
+        return view('admin/forum/threads', $data);
     }
 
     // 2. The Chat View (Marks thread as Read)

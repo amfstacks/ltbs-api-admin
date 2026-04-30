@@ -21,7 +21,8 @@
             <p class="text-xs text-gray-500 mt-1">The URL slug will be generated automatically.</p>
         </div>
 
-        <div x-data="{ imageUrl: '<?= isset($category['icon_url']) && $category['icon_url'] ? base_url($category['icon_url']) : '' ?>' }">
+
+            <div x-data="{ imageUrl: '<?= isset($category) && !empty($category['icon_url']) ? (str_starts_with($category['icon_url'], 'http') ? esc($category['icon_url'], 'js') : base_url($category['icon_url'])) : '' ?>' }">
             <label class="block text-sm font-medium text-gray-700 mb-1">Category Icon (Optional)</label>
             
             <div class="mt-1 flex items-center space-x-6">
