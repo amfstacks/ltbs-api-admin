@@ -16,7 +16,7 @@
     categoryId: '<?= isset($podcast) ? $podcast['category_id'] : '' ?>',
     mediaHighUrl: '<?= isset($podcast) ? esc($podcast['media_high_url'], 'js') : '' ?>',
     primaryAuthorId: '<?= $primary_author_id ?? session()->get('user_id') ?>',
-
+    coverImageUrl: '<?= isset($podcast) && $podcast['cover_image_url'] ? base_url($podcast['cover_image_url']) : '' ?>',
     // Validates before allowing the user to move to the next step
     nextStep() {
         this.errorMessage = ''; // Clear old errors
@@ -48,6 +48,10 @@
             alert('File is too large! Maximum size is 2MB.');
             event.target.value = ''; // Clears the file input instantly!
         }
+            else {
+                // If valid, create a temporary URL to show the preview magically!
+                this.coverImageUrl = URL.createObjectURL(file);
+            }
     }
 }" class="max-w-4xl mx-auto">
     
@@ -118,10 +122,24 @@
                     <label class="block text-sm font-medium text-gray-700 mb-1">Podcast Cover Image</label>
                     <input type="file" name="cover_image" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                 </div> -->
-                <div>
-    <label class="block text-sm font-medium text-gray-700 mb-1">Podcast Cover Image (Max 2MB)</label>
-    <input type="file" name="cover_image" accept="image/*" @change="checkFileSize($event)" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-</div>
+     <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Podcast Cover Image (Max 2MB)</label>
+                    
+                    <div class="mt-2 flex items-center space-x-6">
+                        <div class="h-20 w-20 bg-gray-100 rounded-lg border border-gray-200 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-sm">
+                            <template x-if="coverImageUrl">
+                                <img :src="coverImageUrl" class="h-full w-full object-cover">
+                            </template>
+                            <template x-if="!coverImageUrl">
+                                <i class="ph ph-image text-gray-400 text-3xl"></i>
+                            </template>
+                        </div>
+                        
+                        <div class="flex-1">
+                            <input type="file" name="cover_image" accept="image/*" @change="checkFileSize($event)" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                        </div>
+                    </div>
+                </div>
 
                 <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
                     <p class="text-sm text-gray-500 mb-4"><i class="ph-fill ph-info text-blue-500 mr-1"></i> Enter the Cloudflare R2 / S3 URLs for your audio files to protect server bandwidth.</p>
