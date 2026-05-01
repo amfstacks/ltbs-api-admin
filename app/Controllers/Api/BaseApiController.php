@@ -72,7 +72,7 @@ protected function getUserId()
      * Formats an array of raw podcasts from the database into the exact 
      * nested JSON structure required by the Flutter AudioModel.
      */
-    protected function formatPodcastsWithAuthors($rawPodcasts)
+    protected function formatPodcastsWithAuthors_old_working($rawPodcasts)
     {
         if (empty($rawPodcasts)) return [];
 
@@ -112,6 +112,68 @@ protected function getUserId()
                 'theme_id'        => isset($p['theme_id']) ? (int)$p['theme_id'] : null,
                 'theme_text'      => $p['theme_text'] ?? null,
                 'audio_url'       => $p['media_high_url'] ?? null,
+                'cover_url'       => $p['cover_image_url'] ?? null,
+                'listen_count'    => (int)($p['play_count'] ?? 0),
+                'like_count'      => 0,
+                'comment_count'   => 0,
+                'reshare_count'   => 0,
+            ];
+        }
+
+        return $formatted;
+    }
+
+    protected function formatPodcastsWithAuthors($rawPodcasts)
+    {
+        if (empty($rawPodcasts)) return [];
+
+        // 1. Check for the data saver flag globally!
+        $isDataSaver = $this->request->getGet('data_saver') === 'true';
+
+        $podcastIds = array_column($rawPodcasts, 'id');
+        $db = \Config\Database::connect();
+        
+        // 2. Fetch ALL authors for these podcasts in one fast query
+        $authorsQuery = $db->table('podcast_authors')
+            ->select('podcast_authors.podcast_id, users.id, users.first_name, users.last_name, users.profile_image_url, users.bio')
+            ->join('users', 'users.id = podcast_authors.author_id')
+            ->whereIn('podcast_authors.podcast_id', $podcastIds)
+            ->orderBy('podcast_authors.is_primary', 'DESC')
+            ->get()
+            ->getResultArray();
+
+        $authorsByPodcast = [];
+        foreach ($authorsQuery as $author) {
+            $pid = $author['podcast_id'];
+            $authorsByPodcast[$pid][] = [
+                'id'        => (int)$author['id'],
+                'name'      => trim($author['first_name'] . ' ' . $author['last_name']),
+                'image_url' => $author['profile_image_url'],
+                'bio'       => $author['bio']
+            ];
+        }
+
+        // 3. Format to perfectly match the Flutter AudioModel
+        $formatted = [];
+        foreach ($rawPodcasts as $p) {
+            
+            // Apply Data Saver Logic dynamically
+            $finalAudioUrl = $p['media_high_url'] ?? null;
+            if ($isDataSaver && !empty($p['media_low_url'])) {
+                $finalAudioUrl = $p['media_low_url']; 
+            }
+
+            $formatted[] = [
+                'id'              => (int)$p['id'],
+                'title'           => $p['title'],
+                'authors'         => $authorsByPodcast[$p['id']] ?? [], // Nested list of authors
+                'duration'        => $p['duration'] ?? '00:00', 
+                'file_size_bytes' => isset($p['file_size_bytes']) ? (int)$p['file_size_bytes'] : null,
+                'published_at'    => $p['created_at'] ?? date('Y-m-d H:i:s'),
+                'category_name'   => $p['category_name'] ?? 'Uncategorized',
+                'theme_id'        => isset($p['theme_id']) ? (int)$p['theme_id'] : null,
+                'theme_text'      => $p['theme_text'] ?? null,
+                'audio_url'       => $finalAudioUrl, // Dynamically assigned
                 'cover_url'       => $p['cover_image_url'] ?? null,
                 'listen_count'    => (int)($p['play_count'] ?? 0),
                 'like_count'      => 0,

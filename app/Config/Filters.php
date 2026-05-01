@@ -37,6 +37,7 @@ class Filters extends BaseFilters
         'adminAuth'     => \App\Filters\AdminFilter::class,
         'app_key'       => \App\Filters\AppKeyFilter::class,
         'jwt'           => \App\Filters\JwtFilter::class,
+        'cors'          => \App\Filters\CorsFilter::class,
     ];
 
     /**
@@ -75,6 +76,7 @@ class Filters extends BaseFilters
      */
     public array $globals = [
         'before' => [
+            'cors',
             // 'honeypot',
             // 'csrf',
             // 'invalidchars',

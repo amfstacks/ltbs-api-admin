@@ -60,29 +60,48 @@ class DiscoveryController extends BaseApiController
      * Helper Method: Generates a clean, joined query for the Flutter App
      * Grabs the Category Name and the Primary Author's Name in one sweep.
      */
+    // private function getFormattedPodcasts($limit, $orderByField, $orderDirection, $offset = 0)
+    // {
+    //     return $this->podcastModel
+    //         ->select('
+    //             podcasts.id, 
+    //             podcasts.title, 
+    //             podcasts.slug, 
+    //             podcasts.description, 
+    //             podcasts.cover_image_url, 
+    //             podcasts.media_high_url, 
+    //             podcasts.media_low_url, 
+    //             podcasts.play_count,
+    //             podcasts.created_at as published_at,
+    //             categories.name as category_name,
+    //             users.first_name as author_first,
+    //             users.last_name as author_last
+    //         ')
+    //         ->join('categories', 'categories.id = podcasts.category_id', 'left')
+    //         // Only join the PRIMARY author for the list views
+    //         ->join('podcast_authors', 'podcast_authors.podcast_id = podcasts.id AND podcast_authors.is_primary = 1', 'left')
+    //         ->join('users', 'users.id = podcast_authors.author_id', 'left')
+    //         ->where('podcasts.status', 'published')
+    //         ->orderBy("podcasts.$orderByField", $orderDirection)
+    //         ->findAll($limit, $offset);
+    // }
+
     private function getFormattedPodcasts($limit, $orderByField, $orderDirection, $offset = 0)
     {
-        return $this->podcastModel
+        // 1. Just fetch the raw podcast data with basic category/theme joins
+        $rawPodcasts = $this->podcastModel
             ->select('
-                podcasts.id, 
-                podcasts.title, 
-                podcasts.slug, 
-                podcasts.description, 
-                podcasts.cover_image_url, 
-                podcasts.media_high_url, 
-                podcasts.media_low_url, 
-                podcasts.play_count,
-                podcasts.created_at as published_at,
+                podcasts.*, 
                 categories.name as category_name,
-                users.first_name as author_first,
-                users.last_name as author_last
+                themes.name as theme_text
             ')
             ->join('categories', 'categories.id = podcasts.category_id', 'left')
-            // Only join the PRIMARY author for the list views
-            ->join('podcast_authors', 'podcast_authors.podcast_id = podcasts.id AND podcast_authors.is_primary = 1', 'left')
-            ->join('users', 'users.id = podcast_authors.author_id', 'left')
+            ->join('themes', 'themes.id = podcasts.theme_id', 'left')
             ->where('podcasts.status', 'published')
             ->orderBy("podcasts.$orderByField", $orderDirection)
             ->findAll($limit, $offset);
+
+        // 2. Pass it through the Master Formatter so it matches the Flutter App perfectly!
+        return $this->formatPodcastsWithAuthors($rawPodcasts);
     }
 }

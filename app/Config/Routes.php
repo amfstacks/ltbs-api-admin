@@ -5,6 +5,7 @@ use CodeIgniter\Router\RouteCollection;
 /**
  * @var RouteCollection $routes
  */
+$routes->options('(:any)', 'Home::index');
 $routes->get('/', 'Home::index');
 
 // --- ADMIN PANEL ROUTES ---
@@ -119,7 +120,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($rout
         
         // Profile
         $routes->get('profile', 'ProfileController::index');
-        $routes->post('profile/update', 'ProfileController::update');
+        $routes->post('profile/update', 'ProfileController::updateProfile');
+        $routes->post('profile/avatar', 'ProfileController::uploadAvatar');
         $routes->post('auth/logout', 'AuthController::logout');
 
         // Library (Bookmarks)
