@@ -1,33 +1,17 @@
 <?= $this->extend('admin/layout/master') ?>
 <?= $this->section('content') ?>
 
-<div class="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4">
+<div class="flex justify-between items-center mb-6">
     <div>
         <h1 class="text-2xl font-bold text-navy-900">Podcasts</h1>
         <p class="text-sm text-gray-500 mt-1">Manage all uploaded teachings and audio files.</p>
     </div>
-    
-    <div class="flex flex-col sm:flex-row items-center gap-4">
-        <!-- Search Bar -->
-        <form action="<?= site_url('admin/podcasts') ?>" method="GET" class="relative w-full sm:w-auto">
-            <input type="text" name="search" value="<?= esc($search ?? '') ?>" placeholder="Search teachings..." 
-                   class="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500 text-sm">
-            <i class="ph ph-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-lg"></i>
-            
-            <?php if(!empty($search)): ?>
-                <a href="<?= site_url('admin/podcasts') ?>" class="absolute right-3 top-2.5 text-gray-400 hover:text-red-500 transition-colors">
-                    <i class="ph-bold ph-x"></i>
-                </a>
-            <?php endif; ?>
-        </form>
-
-        <a href="<?= site_url('admin/podcasts/wizard') ?>" class="w-full sm:w-auto bg-gold-500 hover:bg-gold-600 text-navy-900 font-bold py-2 px-4 rounded-lg shadow-sm transition-colors flex items-center justify-center whitespace-nowrap">
-            <i class="ph-bold ph-microphone-stage mr-2"></i> Upload Podcast
-        </a>
-    </div>
+    <a href="<?= site_url('admin/podcasts/wizard') ?>" class="bg-gold-500 hover:bg-gold-600 text-navy-900 font-bold py-2 px-4 rounded-lg shadow-sm transition-colors flex items-center">
+        <i class="ph-bold ph-microphone-stage mr-2"></i> Upload Podcast
+    </a>
 </div>
 
-<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
     <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
@@ -43,22 +27,21 @@
                 <?php if(empty($podcasts)): ?>
                     <tr>
                         <td colspan="5" class="px-6 py-12 text-center">
-                            <i class="ph ph-magnifying-glass text-4xl text-gray-300 mb-2"></i>
-                            <p class="text-gray-500 font-medium"><?= !empty($search) ? 'No teachings found matching your search.' : 'No podcasts uploaded yet.' ?></p>
-                            <?php if(empty($search)): ?>
-                                <p class="text-sm text-gray-400 mt-1">Click the upload button above to add your first teaching.</p>
-                            <?php endif; ?>
+                            <i class="ph ph-headphones text-4xl text-gray-300 mb-2"></i>
+                            <p class="text-gray-500 font-medium">No podcasts uploaded yet.</p>
+                            <p class="text-sm text-gray-400 mt-1">Click the upload button above to add your first teaching.</p>
                         </td>
                     </tr>
                 <?php endif; ?>
                 
                 <?php foreach ($podcasts as $podcast): ?>
                     <tr class="hover:bg-gray-50 transition-colors">
+                        
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="flex items-center">
                                 <div class="flex-shrink-0 h-12 w-12 rounded-lg bg-navy-900 flex items-center justify-center overflow-hidden shadow-sm">
                                     <?php if($podcast['cover_image_url']): ?>
-                                        <img class="h-12 w-12 object-cover" src="<?= str_starts_with($podcast['cover_image_url'], 'http') ? esc($podcast['cover_image_url']) : base_url($podcast['cover_image_url']) ?>" alt="Cover">
+                                        <img class="h-12 w-12 object-cover" src="<?= $podcast['cover_image_url'] ?>" alt="Cover">
                                     <?php else: ?>
                                         <i class="ph-fill ph-book-open text-gold-400 text-xl"></i>
                                     <?php endif; ?>
@@ -101,30 +84,30 @@
                         </td>
 
                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <a href="<?= site_url('admin/podcasts/media/' . $podcast['id']) ?>" class="text-gold-600 hover:text-gold-700 mr-4 transition-colors" title="Manage Audio Media">
-                                <i class="ph-fill ph-headphones text-lg"></i>
-                            </a>
-
-                            <a href="<?= site_url('admin/podcasts/edit/' . $podcast['id']) ?>" class="text-blue-600 hover:text-blue-900 mr-4 transition-colors" title="Edit Details">
+                            <!-- <a href="<?= site_url('admin/podcasts/edit/' . $podcast['id']) ?>" class="text-blue-600 hover:text-blue-900 mr-4 transition-colors" title="Edit">
                                 <i class="ph ph-pencil-simple text-lg"></i>
                             </a>
-                            
-                            <a href="<?= site_url('admin/podcasts/delete/' . $podcast['id']) ?>" onclick="return confirm('Are you sure you want to delete this teaching and all its media files?');" class="text-red-600 hover:text-red-900 transition-colors" title="Delete">
+                            <a href="<?= site_url('admin/podcasts/delete/' . $podcast['id']) ?>" onclick="return confirm('Are you sure you want to delete this teaching?');" class="text-red-600 hover:text-red-900 transition-colors" title="Delete">
                                 <i class="ph ph-trash text-lg"></i>
-                            </a>
+                            </a> -->
+
+                            <a href="<?= site_url('admin/podcasts/media/' . $podcast['id']) ?>" class="text-gold-600 hover:text-gold-700 mr-4 transition-colors" title="Manage Audio Media">
+        <i class="ph-fill ph-headphones text-lg"></i>
+    </a>
+
+    <a href="<?= site_url('admin/podcasts/edit/' . $podcast['id']) ?>" class="text-blue-600 hover:text-blue-900 mr-4 transition-colors" title="Edit Details">
+        <i class="ph ph-pencil-simple text-lg"></i>
+    </a>
+    
+    <a href="<?= site_url('admin/podcasts/delete/' . $podcast['id']) ?>" onclick="return confirm('Are you sure you want to delete this teaching?');" class="text-red-600 hover:text-red-900 transition-colors" title="Delete">
+        <i class="ph ph-trash text-lg"></i>
+    </a>
                         </td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
         </table>
     </div>
-
-    <!-- CodeIgniter Pagination -->
-    <?php if ($pager): ?>
-        <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 mt-auto">
-            <?= $pager->links() ?> 
-        </div>
-    <?php endif; ?>
 </div>
 
 <?= $this->endSection() ?>

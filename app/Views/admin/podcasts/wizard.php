@@ -11,47 +11,95 @@
     maxStep: 4,
     errorMessage: '',
     
-    // Variables to track our compulsory fields
-   title: '<?= isset($podcast) ? esc($podcast['title'], 'js') : '' ?>',
+    // Upload States
+    isUploading: false,
+    uploadProgress: 0,
+    uploadStatusText: 'Uploading files...',
+    
+    // Variables
+    title: '<?= isset($podcast) ? esc($podcast['title'], 'js') : '' ?>',
     categoryId: '<?= isset($podcast) ? $podcast['category_id'] : '' ?>',
-    mediaHighUrl: '<?= isset($podcast) ? esc($podcast['media_high_url'], 'js') : '' ?>',
-    primaryAuthorId: '<?= $primary_author_id ?? session()->get('user_id') ?>',
-coverImageUrl: '<?= isset($podcast) && !empty($podcast['cover_image_url']) ? (str_starts_with($podcast['cover_image_url'], 'http') ? esc($podcast['cover_image_url'], 'js') : base_url($podcast['cover_image_url'])) : '' ?>',
-    // Validates before allowing the user to move to the next step
+    coverImageUrl: '<?= isset($podcast) && !empty($podcast['cover_image_url']) ? (str_starts_with($podcast['cover_image_url'], 'http') ? esc($podcast['cover_image_url'], 'js') : base_url($podcast['cover_image_url'])) : '' ?>',
+    isUpdate: <?= isset($podcast) ? 'true' : 'false' ?>,
+    
     nextStep() {
-        this.errorMessage = ''; // Clear old errors
+        this.errorMessage = ''; 
 
-        if (this.step === 1) {
-            if (this.title.trim() === '' || this.categoryId === '') {
-                this.errorMessage = 'Please fill out all compulsory fields marked with an asterisk (*).';
-                return; // Stop them from moving forward
-            }
+        if (this.step === 1 && (this.title.trim() === '' || this.categoryId === '')) {
+            this.errorMessage = 'Please fill out all compulsory fields marked with an asterisk (*).';
+            return; 
         }
         
-        if (this.step === 2) {
-            if (this.mediaHighUrl.trim() === '') {
-                this.errorMessage = 'Please provide the High Quality Media URL (*).';
+        if (this.step === 2 && !this.isUpdate) {
+            if (!this.$refs.mediaHighInput.files.length) {
+                this.errorMessage = 'Please select a High Quality MP3 file (*).';
                 return;
             }
         }
 
-        // If validation passes, go to next step
         this.step++;
     },
 
-    // Instantly checks file size when a user selects an image
     checkFileSize(event) {
         const file = event.target.files[0];
         const maxSizeInBytes = 2 * 1024 * 1024; // 2MB limit
-        
         if (file && file.size > maxSizeInBytes) {
             alert('File is too large! Maximum size is 2MB.');
-            event.target.value = ''; // Clears the file input instantly!
+            event.target.value = ''; 
+        } else {
+            this.coverImageUrl = URL.createObjectURL(file);
         }
-            else {
-                // If valid, create a temporary URL to show the preview magically!
-                this.coverImageUrl = URL.createObjectURL(file);
+    },
+
+    // Robust AJAX Submitter
+    submitForm(e) {
+        this.errorMessage = '';
+        this.isUploading = true;
+        this.uploadProgress = 0;
+        this.uploadStatusText = 'Sending files to server...';
+
+        let formData = new FormData(e.target);
+        let xhr = new XMLHttpRequest();
+        
+        xhr.open('POST', e.target.action, true);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                this.uploadProgress = Math.round((event.loaded / event.total) * 100);
+                if(this.uploadProgress === 100) {
+                    this.uploadStatusText = 'Server is now syncing files to Cloudflare R2... Please wait.';
+                }
             }
+        };
+
+        xhr.onload = () => {
+            try {
+                // We wrap this in a try/catch so if PHP sends an HTML error page, the UI doesn't freeze!
+                let response = JSON.parse(xhr.responseText);
+                
+                if (xhr.status >= 200 && xhr.status < 300 && response.success) {
+                    window.location.href = response.redirect;
+                } else {
+                    this.isUploading = false;
+                    this.errorMessage = response.message || 'An unknown error occurred during upload.';
+                    this.step = 2; // Kick them back to see the error
+                }
+            } catch (error) {
+                this.isUploading = false;
+                console.error('Raw Server Response:', xhr.responseText); // Log it to the browser console for debugging
+                this.errorMessage = 'Server Crash: The file might be too large for your server settings (Check php.ini), or a database error occurred.';
+                this.step = 2;
+            }
+        };
+
+        xhr.onerror = () => {
+            this.isUploading = false;
+            this.errorMessage = 'A network error occurred. Check your connection.';
+            this.step = 2;
+        };
+
+        xhr.send(formData);
     }
 }" class="max-w-4xl mx-auto">
     
@@ -63,50 +111,61 @@ coverImageUrl: '<?= isset($podcast) && !empty($podcast['cover_image_url']) ? (st
             <div class="bg-gold-500 h-2 rounded-full transition-all duration-300" :style="'width: ' + ((step / maxStep) * 100) + '%'"></div>
         </div>
     </div>
+
     <div x-show="errorMessage !== ''" x-transition class="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-r shadow-sm flex items-center">
         <i class="ph-fill ph-warning-circle text-xl mr-3"></i>
         <p x-text="errorMessage" class="text-sm font-medium"></p>
     </div>
 
-    <!-- <form action="<?= site_url('admin/podcasts/store') ?>" method="POST" enctype="multipart/form-data" class="bg-white rounded-xl shadow-sm border border-gray-100 p-8"> -->
-        <form action="<?= site_url('admin/podcasts/save/' . ($podcast['id'] ?? '')) ?>" method="POST" enctype="multipart/form-data" class="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+    <form action="<?= site_url('admin/podcasts/save/' . ($podcast['id'] ?? '')) ?>" method="POST" enctype="multipart/form-data" @submit.prevent="submitForm" class="bg-white rounded-xl shadow-sm border border-gray-100 p-8 relative overflow-hidden">
         <?= csrf_field() ?>
 
+        <!-- Full Screen Uploading Overlay -->
+        <div x-show="isUploading" style="display: none;" class="absolute inset-0 bg-white/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8">
+            <div class="w-full max-w-md text-center">
+                <i class="ph-duotone ph-cloud-arrow-up text-6xl text-gold-500 mb-4 animate-bounce"></i>
+                <h3 class="text-xl font-bold text-navy-900 mb-2">Publishing Podcast</h3>
+                <p class="text-sm text-gray-500 mb-6" x-text="uploadStatusText"></p>
+                
+                <div class="w-full bg-gray-200 rounded-full h-3 mb-2 overflow-hidden shadow-inner">
+                    <div class="bg-gold-500 h-3 rounded-full transition-all duration-200 ease-out relative" :style="'width: ' + uploadProgress + '%'">
+                        <div class="absolute top-0 left-0 bottom-0 right-0 overflow-hidden">
+                            <div class="w-full h-full bg-white/20 animate-[shimmer_2s_infinite]"></div>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-xs font-bold text-navy-900" x-text="uploadProgress + '%'"></p>
+            </div>
+        </div>
+
+        <!-- STEP 1 -->
         <div x-show="step === 1" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
             <h3 class="text-xl font-bold text-navy-900 mb-6 border-b pb-2">1. Core Information</h3>
-            
             <div class="space-y-5">
-               <div>
-    <label class="block text-sm font-medium text-gray-700 mb-1">
-        Teaching Title <span class="text-red-500">*</span>
-    </label>
-    <input type="text" name="title" x-model="title" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
-</div>
-                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Teaching Title <span class="text-red-500">*</span></label>
+                    <input type="text" name="title" x-model="title" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
+                </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Description summary</label>
-                    <!-- <textarea name="description" rows="3"  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500"></textarea> -->
-                     <textarea name="description" rows="3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500"><?= isset($podcast) ? esc($podcast['description']) : '' ?></textarea>
+                    <textarea name="description" rows="3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500"><?= isset($podcast) ? esc($podcast['description']) : '' ?></textarea>
                 </div>
-
                 <div class="grid grid-cols-2 gap-6">
                     <div>
-    <label class="block text-sm font-medium text-gray-700 mb-1">
-        Category <span class="text-red-500">*</span>
-    </label>
-    <select name="category_id" x-model="categoryId" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
-        <option value="">Select Category...</option>
-        <?php foreach($categories as $cat): ?>
-            <option value="<?= $cat['id'] ?>"><?= esc($cat['name']) ?></option>
-        <?php endforeach; ?>
-    </select>
-</div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Category <span class="text-red-500">*</span></label>
+                        <select name="category_id" x-model="categoryId" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
+                            <option value="">Select Category...</option>
+                            <?php foreach($categories as $cat): ?>
+                                <option value="<?= $cat['id'] ?>" <?= (isset($podcast) && $podcast['category_id'] == $cat['id']) ? 'selected' : '' ?>><?= esc($cat['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Theme</label>
                         <select name="theme_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
                             <option value="">Select Theme (Optional)...</option>
                             <?php foreach($themes as $theme): ?>
-                                <option value="<?= $theme['id'] ?>"><?= esc($theme['name']) ?></option>
+                                <option value="<?= $theme['id'] ?>" <?= (isset($podcast) && $podcast['theme_id'] == $theme['id']) ? 'selected' : '' ?>><?= esc($theme['name']) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -114,58 +173,59 @@ coverImageUrl: '<?= isset($podcast) && !empty($podcast['cover_image_url']) ? (st
             </div>
         </div>
 
+        <!-- STEP 2: MEDIA -->
         <div x-show="step === 2" style="display: none;" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
             <h3 class="text-xl font-bold text-navy-900 mb-6 border-b pb-2">2. Media & Streaming</h3>
             
             <div class="space-y-6">
-                <!-- <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Podcast Cover Image</label>
-                    <input type="file" name="cover_image" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-                </div> -->
-     <div>
+                <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Podcast Cover Image (Max 2MB)</label>
-                    
                     <div class="mt-2 flex items-center space-x-6">
                         <div class="h-20 w-20 bg-gray-100 rounded-lg border border-gray-200 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-sm">
-                            <template x-if="coverImageUrl">
-                                <img :src="coverImageUrl" class="h-full w-full object-cover">
-                            </template>
-                            <template x-if="!coverImageUrl">
-                                <i class="ph ph-image text-gray-400 text-3xl"></i>
-                            </template>
+                            <template x-if="coverImageUrl"><img :src="coverImageUrl" class="h-full w-full object-cover"></template>
+                            <template x-if="!coverImageUrl"><i class="ph ph-image text-gray-400 text-3xl"></i></template>
                         </div>
-                        
                         <div class="flex-1">
                             <input type="file" name="cover_image" accept="image/*" @change="checkFileSize($event)" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                         </div>
                     </div>
                 </div>
 
-                <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <p class="text-sm text-gray-500 mb-4"><i class="ph-fill ph-info text-blue-500 mr-1"></i> Enter the Cloudflare R2 / S3 URLs for your audio files to protect server bandwidth.</p>
-                    
-                    <div class="space-y-4">
-                        <div>
-                     <label class="block text-sm font-medium text-gray-700 mb-1">High Quality URL (320kbps MP3) <span class="text-red-500">*</span></label>
-<input type="url" name="media_high_url" x-model="mediaHighUrl" placeholder="https://media.letthebiblespeak.com/audio_high.mp3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">   </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Data Saver URL (64kbps AAC/M4A) - Optional</label>
-                            <input type="url" name="media_low_url" placeholder="https://media.letthebiblespeak.com/audio_low.m4a" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
+                <?php if(!isset($podcast)): ?>
+                    <div class="p-5 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
+                        <p class="text-sm font-medium text-navy-900 mb-4"><i class="ph-fill ph-cloud-arrow-up text-blue-500 mr-1.5"></i> Upload MP3 Audio Files</p>
+                        <div class="space-y-5">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">High Quality File (320kbps MP3) <span class="text-red-500">*</span></label>
+                                <input type="file" x-ref="mediaHighInput" name="media_high" accept="audio/mpeg, audio/mp3" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-gold-50 file:text-gold-700 hover:file:bg-gold-100 border border-gray-300 rounded-md bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Data Saver File (64kbps AAC/M4A) <span class="text-xs text-gray-400 font-normal">- Optional</span></label>
+                                <input type="file" name="media_low" accept="audio/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-gray-200 file:text-gray-700 hover:file:bg-gray-300 border border-gray-300 rounded-md bg-white">
+                            </div>
                         </div>
                     </div>
-                </div>
+                <?php else: ?>
+                    <div class="p-5 bg-blue-50 rounded-lg border border-blue-100 flex items-start">
+                        <i class="ph-fill ph-info text-blue-500 text-xl mr-3 mt-0.5"></i>
+                        <div>
+                            <h4 class="text-sm font-bold text-blue-900">Audio Management Locked</h4>
+                            <p class="text-sm text-blue-800 mt-1">Audio files cannot be replaced from this general update screen. To update the MP3s for this teaching, please use the dedicated Media Editor.</p>
+                        </div>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
 
+        <!-- STEP 3: AUTHORS -->
         <div x-show="step === 3" style="display: none;" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
             <h3 class="text-xl font-bold text-navy-900 mb-6 border-b pb-2">3. Authors & Permissions</h3>
-            
             <div class="space-y-5">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Primary Author / Teacher</label>
                     <select name="primary_author_id"  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
                         <?php foreach($authors as $author): ?>
-                            <option value="<?= $author['id'] ?>" <?= session()->get('user_id') == $author['id'] ? 'selected' : '' ?>>
+                            <option value="<?= $author['id'] ?>" <?= (isset($primary_author_id) && $primary_author_id == $author['id']) || (!isset($primary_author_id) && session()->get('user_id') == $author['id']) ? 'selected' : '' ?>>
                                 <?= esc($author['first_name'] . ' ' . $author['last_name']) ?>
                             </option>
                         <?php endforeach; ?>
@@ -174,6 +234,7 @@ coverImageUrl: '<?= isset($podcast) && !empty($podcast['cover_image_url']) ? (st
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Add Co-Authors (Optional)</label>
+                    <!-- Make sure the co-authors logic matches what you have in your controller for updates! -->
                     <select name="co_authors[]" multiple class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500 h-24">
                         <?php foreach($authors as $author): ?>
                             <option value="<?= $author['id'] ?>"><?= esc($author['first_name'] . ' ' . $author['last_name']) ?></option>
@@ -184,47 +245,51 @@ coverImageUrl: '<?= isset($podcast) && !empty($podcast['cover_image_url']) ? (st
 
                 <div class="flex items-center mt-4">
                     <input type="checkbox" name="co_authors_can_edit" value="1" class="h-4 w-4 text-gold-500 border-gray-300 rounded focus:ring-gold-500">
-                    <label class="ml-2 block text-sm text-gray-700">Allow Co-Authors to edit text and categories (They cannot change the media URL).</label>
+                    <label class="ml-2 block text-sm text-gray-700">Allow Co-Authors to edit text and categories.</label>
                 </div>
             </div>
         </div>
 
+        <!-- STEP 4: PUBLISH STATUS -->
         <div x-show="step === 4" style="display: none;" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
             <h3 class="text-xl font-bold text-navy-900 mb-6 border-b pb-2">4. Publish</h3>
-            
             <div class="space-y-5">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Publish Status</label>
                     <select name="status" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
-                        <option value="draft">Save as Draft (Hidden from App)</option>
-                        <option value="published">Publish Immediately</option>
+                        <option value="draft" <?= (isset($podcast) && $podcast['status'] == 'draft') ? 'selected' : '' ?>>Save as Draft (Hidden from App)</option>
+                        <option value="published" <?= (!isset($podcast) || $podcast['status'] == 'published') ? 'selected' : '' ?>>Publish Immediately</option>
                     </select>
                 </div>
             </div>
-
             <div class="mt-6 bg-navy-50 p-4 rounded-lg border border-navy-100 flex items-start">
                 <i class="ph-fill ph-check-circle text-navy-900 text-xl mr-3 mt-0.5"></i>
-                <p class="text-sm text-navy-900">You are ready to upload! Ensure your Cloudflare URLs are correct. Once published, this teaching will immediately be available to users on the mobile app.</p>
+                <p class="text-sm text-navy-900">You are ready! Ensure your files are selected. Please do not close the window once you click Save & Upload, as the files need time to sync to the Cloud.</p>
             </div>
         </div>
 
-        <div class="mt-8 pt-6 border-t border-gray-100 flex justify-between">
+        <div class="mt-8 pt-6 border-t border-gray-100 flex justify-between" x-show="!isUploading">
             <button type="button" x-show="step > 1" @click="step--" class="px-6 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
                 Back
             </button>
-            <!-- <div x-show="step === 1"></div> <button type="button" x-show="step < maxStep" @click="step++" class="px-6 py-2 bg-navy-900 text-white font-bold rounded-lg hover:bg-navy-800 transition-colors">
-                Continue
-            </button> -->
+            <div x-show="step === 1"></div> 
+            
             <button type="button" x-show="step < maxStep" @click="nextStep()" class="px-6 py-2 bg-navy-900 text-white font-bold rounded-lg hover:bg-navy-800 transition-colors">
-    Continue
-</button>
+                Continue
+            </button>
 
             <button type="submit" x-show="step === maxStep" style="display: none;" class="px-6 py-2 bg-gold-500 text-navy-900 font-bold rounded-lg hover:bg-gold-600 transition-colors shadow-sm flex items-center">
                 <i class="ph-bold ph-upload-simple mr-2"></i> Save & Upload
             </button>
         </div>
-
     </form>
 </div>
+
+<style>
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+</style>
 
 <?= $this->endSection() ?>

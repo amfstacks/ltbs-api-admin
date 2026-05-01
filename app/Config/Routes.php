@@ -66,7 +66,68 @@ $routes->group('admin', function($routes) {
         $routes->post('forum/reply/(:num)', 'Admin\ForumController::reply/$1');
         $routes->get('forum/podcast/(:num)', 'Admin\ForumController::podcast/$1'); // NEW
 
+
+        $routes->get('podcasts/media/([0-9]+)', 'Admin\PodcastController::media/$1');
+        $routes->post('podcasts/update-media/([0-9]+)', 'Admin\PodcastController::updateMedia/$1');
+
     });
 
     
+});
+
+
+
+// ====================================================================
+// MOBILE APP API ROUTES (v1)
+// ====================================================================
+$routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($routes) {
+
+    // ----------------------------------------------------------------
+    // TIER 1: PUBLIC ROUTES (Requires App-Key only)
+    // ----------------------------------------------------------------
+    
+    // Auth 
+    $routes->post('auth/register', 'AuthController::register');
+    $routes->post('auth/login', 'AuthController::login');
+    $routes->post('auth/logout', 'AuthController::logout', ['filter' => 'jwt']);
+    
+    // Discovery
+    $routes->get('discovery/home', 'DiscoveryController::home');
+    $routes->get('categories', 'DiscoveryController::categories');
+    $routes->get('themes', 'DiscoveryController::themes');
+    
+    // Podcasts & Media
+    $routes->get('podcasts', 'PodcastController::index');
+    $routes->get('podcasts/recent', 'PodcastController::recent');
+    $routes->get('podcasts/popular', 'PodcastController::popular');
+    $routes->get('podcasts/(:num)', 'PodcastController::show/$1');
+    $routes->post('track/play/(:num)', 'PodcastController::trackPlay/$1'); // Silent play tracker
+
+    // Fetch podcasts by Category or Theme slug
+    $routes->get('podcasts/category/(:segment)', 'PodcastController::category/$1');
+    $routes->get('podcasts/theme/(:segment)', 'PodcastController::theme/$1');
+    
+    // Forums (Read-Only Public)
+    $routes->get('forums', 'ForumController::index');
+    $routes->get('forums/(:num)/comments', 'ForumController::comments/$1');
+
+    // ----------------------------------------------------------------
+    // TIER 2: PROTECTED ROUTES (Requires Login / JWT Bearer Token)
+    // ----------------------------------------------------------------
+    // Note: We will create the 'jwt' filter in the next step!
+    $routes->group('', ['filter' => 'jwt'], function ($routes) {
+        
+        // Profile
+        $routes->get('profile', 'ProfileController::index');
+        $routes->post('profile/update', 'ProfileController::update');
+        $routes->post('auth/logout', 'AuthController::logout');
+
+        // Library (Bookmarks)
+        $routes->get('library/bookmarks', 'LibraryController::bookmarks');
+        $routes->post('library/bookmarks/toggle/(:num)', 'LibraryController::toggleBookmark/$1');
+        
+        // Forums (Write Access)
+        $routes->post('forums/(:num)/comments', 'ForumController::createComment/$1');
+    });
+
 });

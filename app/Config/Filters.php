@@ -35,6 +35,8 @@ class Filters extends BaseFilters
         'pagecache'     => PageCache::class,
         'performance'   => PerformanceMetrics::class,
         'adminAuth'     => \App\Filters\AdminFilter::class,
+        'app_key'       => \App\Filters\AppKeyFilter::class,
+        'jwt'           => \App\Filters\JwtFilter::class,
     ];
 
     /**
@@ -107,5 +109,9 @@ class Filters extends BaseFilters
      *
      * @var array<string, array<string, list<string>>>
      */
-    public array $filters = [];
+    public array $filters = [
+        'app_key' => [
+            'before' => ['api/*'] // This applies the App Key check to ALL routes starting with /api/
+        ]
+    ];
 }
