@@ -100,8 +100,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($rout
     $routes->get('podcasts', 'PodcastController::index');
     $routes->get('podcasts/recent', 'PodcastController::recent');
     $routes->get('podcasts/popular', 'PodcastController::popular');
-    $routes->get('podcasts/(:num)', 'PodcastController::show/$1');
-    $routes->post('track/play/(:num)', 'PodcastController::trackPlay/$1'); // Silent play tracker
+    $routes->get('podcasts/(:segment)', 'PodcastController::showPodcast/$1');
+    $routes->post('track/play/(:segment)', 'PodcastController::trackPlay/$1');// Silent play tracker
 
     // Fetch podcasts by Category or Theme slug
     $routes->get('podcasts/category/(:segment)', 'PodcastController::category/$1');
@@ -125,6 +125,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($rout
         // Library (Bookmarks)
         $routes->get('library/bookmarks', 'LibraryController::bookmarks');
         $routes->post('library/bookmarks/toggle/(:num)', 'LibraryController::toggleBookmark/$1');
+        $routes->post('library/downloads/track/(:segment)', 'LibraryController::trackDownload/$1');
         
         // Forums (Write Access)
         $routes->post('forums/(:num)/comments', 'ForumController::createComment/$1');
