@@ -302,15 +302,21 @@ class PodcastController extends BaseApiController
     public function recent()
     {
         // 1. Fetch raw paginated results
+
+        $page = (int) ($this->request->getVar('page') ?? 1);
         $rawPodcasts = $this->podcastModel
             ->select('podcasts.*, categories.name as category_name, themes.name as theme_text')
             ->join('categories', 'categories.id = podcasts.category_id', 'left')
             ->join('themes', 'themes.id = podcasts.theme_id', 'left')
             ->where('podcasts.status', 'published')
             ->orderBy('podcasts.created_at', 'DESC')
-            ->paginate(15); // 15 items per page
+            // ->paginate(3); // 15 items per page
+            ->paginate(3, 'default', $page);
             
         $pager = $this->podcastModel->pager;
+        if ($page > $pager->getPageCount()) {
+            $rawPodcasts = []; 
+        }
         
         // 2. Pass them through our Base Controller formatting engine
         $formattedPodcasts = $this->formatPodcastsWithAuthors($rawPodcasts);
