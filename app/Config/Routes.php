@@ -113,6 +113,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($rout
     // Forums (Read-Only Public)
     $routes->get('forums', 'ForumController::index');
     $routes->get('forums/(:num)/comments', 'ForumController::comments/$1');
+    $routes->get('forums/(:segment)/comments', 'ForumController::comments/$1');
+    $routes->get('forums/threads/(:num)/replies', 'ForumController::threadReplies/$1');
 
     // ----------------------------------------------------------------
     // TIER 2: PROTECTED ROUTES (Requires Login / JWT Bearer Token)
@@ -134,6 +136,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($rout
         
         // Forums (Write Access)
         $routes->post('forums/(:num)/comments', 'ForumController::createComment/$1');
+        $routes->post('forums/(:segment)/comments', 'ForumController::createComment/$1');
     });
 
 });

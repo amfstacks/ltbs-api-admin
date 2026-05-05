@@ -76,7 +76,7 @@ class ForumController extends BaseApiController
      * GET /api/v1/forums/{slug}/comments
      * Loads the podcast details AND the structured Thread -> Reply data.
      */
-    public function comments($slug)
+    public function comments_old($slug)
     {
         $podcastModel = new PodcastModel();
         $db = \Config\Database::connect();
@@ -175,6 +175,161 @@ class ForumController extends BaseApiController
         ];
 
         return $this->sendSuccess($payload, 'Forum data loaded successfully');
+    }
+    /**
+     * GET /api/v1/forums/{slug}/comments?page=1
+     * Fetches ONLY the Top-Level Parent Comments (Threads), paginated.
+     */
+    public function comments($slug)
+    {
+        $podcastModel = new PodcastModel();
+        $db = \Config\Database::connect();
+
+        // 1. Fetch Podcast
+        $podcast = $podcastModel->where('slug', $slug)->where('status', 'published')->first();
+        if (!$podcast) return $this->sendError('Podcast not found', 404);
+
+        $page = (int) ($this->request->getVar('page') ?? 1);
+        $perPage = 15;
+
+        // 2. Fetch the Threads with their Initial Message and Reply Count
+        // We use a powerful subquery to grab the FIRST reply (which acts as the main comment body)
+        $builder = $db->table('forum_threads')
+            ->select('
+                forum_threads.id as thread_id, 
+                forum_threads.created_at, 
+                users.id as user_id, 
+                users.first_name, 
+                users.last_name, 
+                users.profile_image_url,
+                users.role,
+                (SELECT message FROM forum_replies WHERE thread_id = forum_threads.id ORDER BY id ASC LIMIT 1) as comment_body,
+                (SELECT COUNT(*) FROM forum_replies WHERE thread_id = forum_threads.id) - 1 as reply_count
+            ')
+            ->join('users', 'users.id = forum_threads.user_id')
+            ->where('forum_threads.podcast_id', $podcast['id'])
+            ->where('forum_threads.deleted_at', null)
+            ->orderBy('forum_threads.created_at', 'DESC');
+
+        // Manual Pagination
+        $totalItems = $builder->countAllResults(false); // Count without resetting query
+        $threads = $builder->limit($perPage, ($page - 1) * $perPage)->get()->getResultArray();
+        
+        $totalPages = ceil($totalItems / $perPage);
+        if ($page > $totalPages) $threads = [];
+
+        // 3. Format exactly for the Flutter App
+        $formattedThreads = [];
+        foreach ($threads as $t) {
+            $formattedThreads[] = [
+                'thread_id'    => (int)$t['thread_id'],
+                'message'      => $t['comment_body'],
+                'reply_count'  => (int)$t['reply_count'],
+                'created_at'   => $t['created_at'],
+                'is_official'  => in_array($t['role'], ['superadmin', 'author']),
+                'user'         => [
+                    'id'     => (int)$t['user_id'],
+                    'name'   => trim($t['first_name'] . ' ' . $t['last_name']),
+                    'avatar' => $t['profile_image_url']
+                ]
+            ];
+        }
+
+        $payload = [
+            'threads'    => $formattedThreads,
+            'pagination' => [
+                'current_page' => $page,
+                'total_pages'  => $totalPages,
+                'total_items'  => $totalItems,
+                'per_page'     => $perPage
+            ]
+        ];
+
+        return $this->sendSuccess($payload, 'Parent comments loaded successfully');
+    }
+
+    /**
+     * GET /api/v1/forums/threads/{thread_id}/replies?page=1
+     * Fetches the nested replies for a specific thread, paginated!
+     */
+    public function threadReplies($threadId)
+    {
+        $db = \Config\Database::connect();
+        $page = (int) ($this->request->getVar('page') ?? 1);
+        $perPage = 10; // Load 10 replies at a time when they click "View Replies"
+
+        // 1. Find the ID of the FIRST reply (because that is the Parent Comment Body, we don't want to load it again)
+        $firstReply = $db->table('forum_replies')
+            ->select('id')
+            ->where('thread_id', $threadId)
+            ->orderBy('id', 'ASC')
+            ->limit(1)
+            ->get()->getRowArray();
+
+        if (!$firstReply) return $this->sendError('Thread not found', 404);
+
+        // 2. Fetch the actual replies, joining the user AND the parent user (if they tagged someone)
+        $builder = $db->table('forum_replies')
+            ->select('
+                forum_replies.id as reply_id, 
+                forum_replies.message, 
+                forum_replies.created_at, 
+                users.id as user_id,
+                users.first_name, 
+                users.last_name, 
+                users.profile_image_url, 
+                users.role,
+                parent_user.first_name as replying_to_first,
+                parent_user.last_name as replying_to_last
+            ')
+            ->join('users', 'users.id = forum_replies.user_id')
+            // This join finds who they are replying to!
+            ->join('forum_replies as parent_reply', 'parent_reply.id = forum_replies.parent_reply_id', 'left')
+            ->join('users as parent_user', 'parent_user.id = parent_reply.user_id', 'left')
+            ->where('forum_replies.thread_id', $threadId)
+            ->where('forum_replies.id !=', $firstReply['id']) // Skip the parent body!
+            ->where('forum_replies.deleted_at', null)
+            ->orderBy('forum_replies.created_at', 'ASC'); // Oldest replies first (like YouTube)
+
+        $totalItems = $builder->countAllResults(false);
+        $replies = $builder->limit($perPage, ($page - 1) * $perPage)->get()->getResultArray();
+        
+        $totalPages = ceil($totalItems / $perPage);
+        
+        $formattedReplies = [];
+        foreach ($replies as $r) {
+            
+            // Build the "@User" tag if they replied to a specific person
+            $replyingTo = null;
+            if (!empty($r['replying_to_first'])) {
+                $replyingTo = trim($r['replying_to_first'] . ' ' . $r['replying_to_last']);
+            }
+
+            $formattedReplies[] = [
+                'reply_id'    => (int)$r['reply_id'],
+                'message'     => $r['message'],
+                'created_at'  => $r['created_at'],
+                'replying_to' => $replyingTo, // Flutter will use this to show "@John" in blue!
+                'is_official' => in_array($r['role'], ['superadmin', 'author']),
+                'user'        => [
+                    'id'     => (int)$r['user_id'],
+                    'name'   => trim($r['first_name'] . ' ' . $r['last_name']),
+                    'avatar' => $r['profile_image_url']
+                ]
+            ];
+        }
+
+        $payload = [
+            'replies'    => $formattedReplies,
+            'pagination' => [
+                'current_page' => $page,
+                'total_pages'  => $totalPages,
+                'total_items'  => $totalItems,
+                'per_page'     => $perPage
+            ]
+        ];
+
+        return $this->sendSuccess($payload, 'Replies loaded successfully');
     }
 
     /**
