@@ -164,7 +164,8 @@ protected function getUserId()
             }
 
             $formatted[] = [
-                'id'              => (int)$p['id'],
+                // 'id'              => (int)$p['id'],
+                'slug'           => $p['slug'],
                 'title'           => $p['title'],
                 'authors'         => $authorsByPodcast[$p['id']] ?? [], // Nested list of authors
                 'duration'        => $p['duration'] ?? '00:00', 

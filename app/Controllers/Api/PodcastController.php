@@ -33,15 +33,17 @@ class PodcastController extends BaseApiController
             return $this->sendError('Category not found', 404);
         }
 
+         $page = (int) ($this->request->getVar('page') ?? 1);
         // 2. Fetch the paginated podcasts for this category
+        //  podcasts.id, 
+        //         podcasts.title, 
+        //         podcasts.slug, 
+        //         podcasts.cover_image_url, 
+        //         podcasts.play_count,
+        //         podcasts.created_at as published_at,
         $podcasts = $this->podcastModel
             ->select('
-                podcasts.id, 
-                podcasts.title, 
-                podcasts.slug, 
-                podcasts.cover_image_url, 
-                podcasts.play_count,
-                podcasts.created_at as published_at,
+                podcasts.*,
                 users.first_name as author_first,
                 users.last_name as author_last
             ')
@@ -50,11 +52,15 @@ class PodcastController extends BaseApiController
             ->where('podcasts.category_id', $category['id'])
             ->where('podcasts.status', 'published')
             ->orderBy('podcasts.created_at', 'DESC')
-            ->paginate(10); // 10 teachings per page
+            ->paginate(15, 'default', $page);
 
         // 3. Extract Pagination Math for Flutter
         $pager = $this->podcastModel->pager;
+        if ($page > $pager->getPageCount()) {
+            $podcasts = []; 
+        }
 
+         $formattedPodcasts = $this->formatPodcastsWithAuthors($podcasts);
         // 4. Assemble the Payload
         $payload = [
             'category' => [
@@ -63,7 +69,7 @@ class PodcastController extends BaseApiController
                 'slug'     => $category['slug'],
                 'icon_url' => $category['icon_url'] ?? null
             ],
-            'podcasts'   => $podcasts,
+            'podcasts'   => $formattedPodcasts,
             'pagination' => [
                 'current_page' => $pager->getCurrentPage(),
                 'total_pages'  => $pager->getPageCount(),
@@ -87,6 +93,7 @@ class PodcastController extends BaseApiController
         if (!$theme) {
             return $this->sendError('Theme not found', 404);
         }
+        $page = (int) ($this->request->getVar('page') ?? 1);
 
         $podcasts = $this->podcastModel
             ->select('
@@ -104,7 +111,7 @@ class PodcastController extends BaseApiController
             ->where('podcasts.theme_id', $theme['id'])
             ->where('podcasts.status', 'published')
             ->orderBy('podcasts.created_at', 'DESC')
-            ->paginate(10); 
+            ->paginate(15, 'default', $page);
 
         $pager = $this->podcastModel->pager;
 
@@ -292,6 +299,8 @@ class PodcastController extends BaseApiController
             }
         }
 
+       
+
         return $this->sendSuccess(null, 'Play counted and history updated');
     }
 
@@ -339,8 +348,44 @@ class PodcastController extends BaseApiController
      * GET /api/v1/podcasts/popular?page=1
      * Fetches paginated list of all published teachings, sorted by most listened.
      */
+    // public function popular()
+    // {
+    //     // 1. Fetch raw paginated results sorted by play_count!
+    //     $rawPodcasts = $this->podcastModel
+    //         ->select('podcasts.*, categories.name as category_name, themes.name as theme_text')
+    //         ->join('categories', 'categories.id = podcasts.category_id', 'left')
+    //         ->join('themes', 'themes.id = podcasts.theme_id', 'left')
+    //         ->where('podcasts.status', 'published')
+    //         ->orderBy('podcasts.play_count', 'DESC') // <--- THE MAGIC SORT
+    //         ->paginate(15);
+            
+    //     $pager = $this->podcastModel->pager;
+        
+    //     // 2. Pass them through our Base Controller formatting engine
+    //     $formattedPodcasts = $this->formatPodcastsWithAuthors($rawPodcasts);
+        
+    //     // 3. Assemble Payload
+    //     $payload = [
+    //         'podcasts'   => $formattedPodcasts,
+    //         'pagination' => [
+    //             'current_page' => $pager->getCurrentPage(),
+    //             'total_pages'  => $pager->getPageCount(),
+    //             'total_items'  => $pager->getTotal(),
+    //             'per_page'     => $pager->getPerPage()
+    //         ]
+    //     ];
+        
+    //     return $this->sendSuccess($payload, 'Popular teachings loaded successfully');
+    // }
+    /**
+     * GET /api/v1/podcasts/popular?page=1
+     * Fetches paginated list of all published teachings, sorted by play_count.
+     */
     public function popular()
     {
+        // THE FIX 1: Manually intercept the page number from the URL request
+        $page = (int) ($this->request->getVar('page') ?? 1);
+
         // 1. Fetch raw paginated results sorted by play_count!
         $rawPodcasts = $this->podcastModel
             ->select('podcasts.*, categories.name as category_name, themes.name as theme_text')
@@ -348,9 +393,16 @@ class PodcastController extends BaseApiController
             ->join('themes', 'themes.id = podcasts.theme_id', 'left')
             ->where('podcasts.status', 'published')
             ->orderBy('podcasts.play_count', 'DESC') // <--- THE MAGIC SORT
-            ->paginate(15);
+            // THE FIX 2: Forcefully inject the page number (15 items per page)
+            ->paginate(15, 'default', $page);
             
         $pager = $this->podcastModel->pager;
+
+        // THE FIX 3: The Out-Of-Bounds Safety Net
+        // If they ask for a page beyond the max available, return empty array
+        if ($page > $pager->getPageCount()) {
+            $rawPodcasts = [];
+        }
         
         // 2. Pass them through our Base Controller formatting engine
         $formattedPodcasts = $this->formatPodcastsWithAuthors($rawPodcasts);
@@ -359,7 +411,7 @@ class PodcastController extends BaseApiController
         $payload = [
             'podcasts'   => $formattedPodcasts,
             'pagination' => [
-                'current_page' => $pager->getCurrentPage(),
+                'current_page' => $page, // Use explicitly captured page number
                 'total_pages'  => $pager->getPageCount(),
                 'total_items'  => $pager->getTotal(),
                 'per_page'     => $pager->getPerPage()
@@ -367,5 +419,68 @@ class PodcastController extends BaseApiController
         ];
         
         return $this->sendSuccess($payload, 'Popular teachings loaded successfully');
+    }
+
+
+    /**
+     * GET /api/v1/podcasts/author/{id}?page=1
+     * Fetches paginated teachings for a specific author
+     */
+    public function author($id)
+    {
+        $db = \Config\Database::connect();
+
+        // 1. Find the Author (User) details
+        $author = $db->table('users')
+            ->select('id, first_name, last_name, profile_image_url, bio')
+            ->where('id', $id)
+            ->get()
+            ->getRowArray();
+
+        if (!$author) {
+            return $this->sendError('Author not found', 404);
+        }
+
+        // 2. Safely capture the page
+        $page = (int) ($this->request->getVar('page') ?? 1);
+
+        // 3. Fetch the paginated podcasts for this author
+        $rawPodcasts = $this->podcastModel
+            ->select('podcasts.*, categories.name as category_name, themes.name as theme_text')
+            ->join('podcast_authors', 'podcast_authors.podcast_id = podcasts.id', 'inner') // MUST have this author
+            ->join('categories', 'categories.id = podcasts.category_id', 'left')
+            ->join('themes', 'themes.id = podcasts.theme_id', 'left')
+            ->where('podcast_authors.author_id', $id)
+            ->where('podcasts.status', 'published')
+            ->orderBy('podcasts.created_at', 'DESC')
+            ->paginate(15, 'default', $page);
+
+        $pager = $this->podcastModel->pager;
+
+        if ($page > $pager->getPageCount()) {
+            $rawPodcasts = [];
+        }
+
+        // 4. Run it through your magic formatter!
+        $formattedPodcasts = $this->formatPodcastsWithAuthors($rawPodcasts);
+
+        // 5. Assemble Payload
+        $payload = [
+            'author' => [
+                'id'        => (int) $author['id'],
+                'name'      => trim($author['first_name'] . ' ' . $author['last_name']),
+                'image_url' => $author['profile_image_url'],
+                'bio'       => $author['bio']
+            ],
+            'podcasts'   => $formattedPodcasts,
+            'pagination' => [
+                'current_page' => $page,
+                'total_pages'  => $pager->getPageCount(),
+                'total_items'  => $pager->getTotal(),
+                'per_page'     => $pager->getPerPage()
+            ]
+        ];
+
+        return $this->sendSuccess($payload, 'Author teachings loaded successfully');
     }
 }

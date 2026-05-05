@@ -10,18 +10,67 @@ class LibraryController extends BaseApiController
     /**
      * Helper to get the logged-in User ID from the JWT request header
      */
-    private function getUserId()
+    // private function getUserId()
+    // {
+    //     $header = $this->request->getHeaderLine('Authorization');
+    //     preg_match('/Bearer\s(\S+)/', $header, $matches);
+    //     $token = $matches[1];
+        
+    //     $key = getenv('JWT_SECRET');
+    //     $decoded = \Firebase\JWT\JWT::decode($token, new \Firebase\JWT\Key($key, 'HS256'));
+        
+    //     return $decoded->uid;
+    // }
+
+
+    /**
+     * POST /api/v1/podcasts/{slug}/like
+     * Toggles a Like on/off using strict Database Transactions.
+     */
+    public function toggleLike($slug)
     {
-        $header = $this->request->getHeaderLine('Authorization');
-        preg_match('/Bearer\s(\S+)/', $header, $matches);
-        $token = $matches[1];
+        $userId = $this->getUserId(); // Fails if not logged in
+        if (!$userId) return $this->sendError('Please login to like this teaching.', 401);
+
+        $db = \Config\Database::connect();
+        $podcast = $db->table('podcasts')->where('slug', $slug)->get()->getRowArray();
         
-        $key = getenv('JWT_SECRET');
-        $decoded = \Firebase\JWT\JWT::decode($token, new \Firebase\JWT\Key($key, 'HS256'));
-        
-        return $decoded->uid;
+        if (!$podcast) return $this->sendError('Podcast not found', 404);
+        $podcastId = $podcast['id'];
+
+        // Start Transaction
+        $db->transStart();
+
+        // Check if already liked
+        $existing = $db->table('podcast_likes')->where(['user_id' => $userId, 'podcast_id' => $podcastId])->countAllResults();
+
+        if ($existing > 0) {
+            // UNLIKE: Delete record and decrement count
+            $db->table('podcast_likes')->where(['user_id' => $userId, 'podcast_id' => $podcastId])->delete();
+            $db->table('podcasts')->where('id', $podcastId)->set('like_count', 'like_count-1', FALSE)->update();
+            $action = 'unliked';
+        } else {
+            // LIKE: Insert record and increment count
+            $db->table('podcast_likes')->insert(['user_id' => $userId, 'podcast_id' => $podcastId]);
+            $db->table('podcasts')->where('id', $podcastId)->set('like_count', 'like_count+1', FALSE)->update();
+            $action = 'liked';
+        }
+
+        // Commit Transaction
+        $db->transComplete();
+
+        if ($db->transStatus() === FALSE) {
+            return $this->sendError('Database error occurred while updating like status.', 500);
+        }
+
+        return $this->sendSuccess(['action' => $action], "Teaching $action successfully");
     }
 
+    /**
+     * POST /api/v1/podcasts/{slug}/bookmark
+     * Toggles a Bookmark on/off.
+     */
+  
     /**
      * POST /api/v1/library/bookmarks/toggle/{slug}
      * Adds or removes a bookmark for the logged-in user
