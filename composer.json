@@ -11,7 +11,7 @@
     },
     "require": {
         "php": "^8.2",
-        "aws/aws-sdk-php": "^3.379",
+        "aws/aws-sdk-php": "^3.380",
         "codeigniter4/framework": "^4.7",
         "firebase/php-jwt": "^7.0"
     },

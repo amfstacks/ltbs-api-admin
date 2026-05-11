@@ -3,6 +3,8 @@
 namespace App\Controllers\Api;
 
 use CodeIgniter\RESTful\ResourceController;
+use Aws\S3\S3Client;
+use Aws\Exception\AwsException;
 
 class BaseApiController extends ResourceController
 {
@@ -123,7 +125,7 @@ protected function getUserId()
         return $formatted;
     }
 
-    protected function formatPodcastsWithAuthors($rawPodcasts)
+    protected function formatPodcastsWithAuthors($rawPodcasts,$usehls = false)
     {
         if (empty($rawPodcasts)) return [];
 
@@ -163,6 +165,8 @@ protected function getUserId()
                 $finalAudioUrl = $p['media_low_url']; 
             }
 
+            $finalAudioUrl = $this->getSecureAudioUrl($finalAudioUrl);
+
             $formatted[] = [
                 // 'id'              => (int)$p['id'],
                 'slug'           => $p['slug'],
@@ -185,4 +189,45 @@ protected function getUserId()
 
         return $formatted;
     }
+
+
+    protected function getSecureAudioUrl($rawUrl)
+    {
+        if (empty($rawUrl)) return null;
+
+        // 1. Extract the exact file path from the URL
+        // E.g., "https://pub-mycdn.r2.dev/audio/message.mp3" -> "audio/message.mp3"
+        $parsedUrl = parse_url($rawUrl);
+        $objectKey = ltrim($parsedUrl['path'], '/');
+
+        try {
+            // 2. Initialize the S3 Client for Cloudflare R2
+            $s3Client = new S3Client([
+                'region'      => 'auto', // R2 always uses 'auto'
+                'endpoint'    => getenv('R2_ENDPOINT'),
+                'version'     => 'latest',
+                'credentials' => [
+                    'key'    => getenv('R2_ACCESS_KEY'),
+                    'secret' => getenv('R2_SECRET_KEY'),
+                ],
+            ]);
+
+            // 3. Create the command to fetch the file
+            $cmd = $s3Client->getCommand('GetObject', [
+                'Bucket' => getenv('R2_BUCKET'),
+                'Key'    => $objectKey,
+            ]);
+
+            // 4. Generate the signed URL valid for 2 hours (+2 hours)
+            $request = $s3Client->createPresignedRequest($cmd, '+2 hours');
+
+            // Return the secure, time-expiring URL!
+            return (string) $request->getUri();
+            
+        } catch (AwsException $e) {
+            // If Cloudflare is down or keys are wrong, log it so you can debug,
+            // but don't crash the entire API response.
+            log_message('error', '[R2 URL Signing Failed] ' . $e->getMessage());
+            return null;
+        }}
 }

@@ -86,4 +86,25 @@ class CloudflareStorage
             return false;
         }
     }
+
+    public function deleteFolder(string $prefix): bool
+    {
+        if (empty($prefix)) return false;
+
+        try {
+            // S3/R2 does not have a single "delete folder" command. 
+            // We must use the built-in deleteMatchingObjects helper.
+            \Aws\S3\ObjectCopier::class; // Ensure AWS classes are loaded
+            
+            \Aws\S3\BatchDelete::fromListObjects($this->client, [
+                'Bucket' => $this->bucket,
+                'Prefix' => ltrim($prefix, '/')
+            ])->delete();
+
+            return true;
+        } catch (\Exception $e) {
+            log_message('error', 'Cloudflare R2 Bulk Delete Failed: ' . $e->getMessage());
+            return false;
+        }
+    }
 }

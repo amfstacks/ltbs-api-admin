@@ -477,7 +477,7 @@ private function getWizardData()
         return redirect()->to('admin/podcasts')->with('success', 'Podcast deleted successfully.');
     }
 
-    public function save($id = null)
+    public function save_old_beforeHLS_encoding($id = null)
     {
         $db = \Config\Database::connect();
         $db->transStart(); 
@@ -589,6 +589,497 @@ private function getWizardData()
         return redirect()->to('admin/podcasts');
     }
 
+    /**
+     * Generates a clean, unique slug for a podcast.
+     * Example: "The Holy Spirit" -> "the-holy-spirit"
+     * If taken: "the-holy-spirit-1", "the-holy-spirit-2"
+     */
+    private function generateUniqueSlug(string $title): string
+    {
+        // 1. Convert title to lowercase and replace spaces/special chars with dashes
+        $baseSlug = strtolower(url_title($title, '-', true));
+        $slug = $baseSlug;
+        $counter = 1;
+
+        // 2. Keep checking the database until we find a slug that does NOT exist
+        // (If the DB rollback happened previously, this will safely return the base slug!)
+        while ($this->podcastModel->where('slug', $slug)->first()) {
+            $slug = $baseSlug . '-' . $counter;
+            $counter++;
+        }
+
+        return $slug;
+    }
+     public function save($id = null)
+    {
+        $db = \Config\Database::connect();
+        $db->transStart(); 
+
+        $title = $this->request->getPost('title');
+        $slug = '';
+        $podcastData = [
+            'title'       => $title,
+            'description' => $this->request->getPost('description'),
+            'category_id' => $this->request->getPost('category_id'),
+            'theme_id'    => $this->request->getPost('theme_id') ?: null,
+            'status'      => $this->request->getPost('status')
+        ];
+
+        $oldPodcast = null;
+        if ($id) {
+            $oldPodcast = $this->podcastModel->find($id);
+        } else {
+            $slug = $this->generateUniqueSlug($title);
+            $podcastData['slug'] = $slug;
+            $podcastData['ffmeg_status'] = 'processing';
+            $podcastData['created_by'] = session()->get('user_id');
+            $podcastData['published_at'] = $this->request->getPost('status') === 'published' ? date('Y-m-d H:i:s') : null;
+        }
+
+        $cloudflare = new \App\Libraries\CloudflareStorage();
+
+        // --------------------------------------------------------------------
+        // 1. CLOUDFLARE R2: Handle Cover Image (For Both New & Updates)
+        // --------------------------------------------------------------------
+        $coverFile = $this->request->getFile('cover_image');
+        if ($coverFile && $coverFile->isValid() && !$coverFile->hasMoved()) {
+            $coverUrl = $cloudflare->upload($coverFile, 'podcasts/covers');
+            if ($coverUrl) {
+                $podcastData['cover_image_url'] = $coverUrl;
+                if ($oldPodcast && !empty($oldPodcast['cover_image_url'])) {
+                    $cloudflare->delete($oldPodcast['cover_image_url']);
+                }
+            } else {
+                $db->transRollback();
+                return $this->respondWithError('Failed to upload cover image to Cloudflare.');
+            }
+        }
+
+        // --------------------------------------------------------------------
+        // 2. CLOUDFLARE R2: Handle MP3 Uploads (ONLY FOR NEW PODCASTS)
+        // --------------------------------------------------------------------
+        if (!$id) {
+
+            // High Quality MP3 (Required)
+            $highFile = $this->request->getFile('media_high');
+   if ($highFile && $highFile->isValid() && !$highFile->hasMoved()) {
+
+   if ($highFile && $highFile->isValid() && !$highFile->hasMoved()) {
+                $vaultDir = WRITEPATH . 'uploads/vault/';
+                if (!is_dir($vaultDir)) mkdir($vaultDir, 0777, true);
+                
+                // Save it locally as slug.mp3
+                $highFile->move($vaultDir, $slug . '.mp3');
+            }
+        // try {
+        //     // Send the file object to our bulletproof processor
+        //     $mediaResults = $this->processAllMedia($highFile, $slug);
+            
+        //     // 1. The 100% Original, Untouched MP3 (The Vault)
+        //     $podcastData['master_high_url'] = $mediaResults['master_high'];
+            
+        //     // 2. The Compressed 64k MP3 (For data-saver downloads)
+        //     $podcastData['master_low_url']  = $mediaResults['master_low'];
+            
+        //     // 3. The 128k HLS Stream (Primary player stream)
+        //     $podcastData['media_high_url']  = $mediaResults['hls_high'];
+            
+        //     // 4. The 64k HLS Stream (Data-saver player stream)
+        //     $podcastData['media_low_url']   = $mediaResults['hls_low'];
+            
+        // } catch (\Exception $e) {
+        //     $db->transRollback();
+        //     return $this->respondWithError('Media Processing Failed: ' . $e->getMessage());
+        // }
+    }
+
+            // Low Quality AAC/MP3 (Optional)
+            // $lowFile = $this->request->getFile('media_low');
+            // if ($lowFile && $lowFile->isValid() && !$lowFile->hasMoved()) {
+            //     $lowUrl = $cloudflare->upload($lowFile, 'podcasts/audio/low');
+            //     if ($lowUrl) {
+            //         $podcastData['media_low_url'] = $lowUrl;
+            //     }
+            // }
+        }
+
+        // --------------------------------------------------------------------
+        // 3. Database Updates
+        // --------------------------------------------------------------------
+        if ($id) {
+            $this->podcastModel->update($id, $podcastData);
+            $podcastId = $id;
+        } else {
+            // 3. Drop the job into the Waiting Room!
+           
+            $podcastId = $this->podcastModel->insert($podcastData);
+
+            // ==========================================
+            // JOB THROTTLING: Calculate the next safe start time
+            // ==========================================
+            $db = \Config\Database::connect();
+            
+            // Find the most recently scheduled job (pending or processing)
+            $lastJob = $db->table('media_queue')
+                          ->whereIn('status', ['pending', 'processing'])
+                          ->orderBy('start_time', 'DESC')
+                          ->get()
+                          ->getRow();
+
+            $startTime = date('Y-m-d H:i:s'); // Default: Start immediately!
+
+            if ($lastJob && $lastJob->start_time) {
+                $lastJobTime = strtotime($lastJob->start_time);
+                $currentTime = time();
+                
+                // Add a 20-minute "breathing gap" to the last job
+                $nextAvailableTime = $lastJobTime + (20 * 60); 
+                
+                // If the next available slot is in the future, use it. 
+                // Otherwise, the queue has been empty for a while, so start now.
+                if ($nextAvailableTime > $currentTime) {
+                    $startTime = date('Y-m-d H:i:s', $nextAvailableTime);
+                }
+            }
+            // Drop the job into the Waiting Room with its scheduled time
+            $db->table('media_queue')->insert([
+                'podcast_id' => $podcastId,
+                'slug'       => $slug,
+                'status'     => 'pending',
+                'start_time' => $startTime
+            ]);
+
+            //  $db->table('media_queue')->insert([
+            //     'podcast_id' => $podcastId,
+            //     'slug'       => $slug,
+            //     'status'     => 'pending'
+            // ]);
+        }
+
+        $authorModel = new \App\Models\PodcastAuthorModel();
+        if ($id) {
+            $authorModel->where('podcast_id', $id)->delete(); 
+        }
+
+        $primaryAuthorId = $this->request->getPost('primary_author_id');
+        $authorModel->insert(['podcast_id' => $podcastId, 'author_id' => $primaryAuthorId, 'is_primary' => 1, 'can_edit' => 1]);
+
+        $coAuthors = $this->request->getPost('co_authors') ?? [];
+        foreach ($coAuthors as $coAuthorId) {
+            if ($coAuthorId != $primaryAuthorId) {
+                $authorModel->insert(['podcast_id' => $podcastId, 'author_id' => $coAuthorId, 'is_primary' => 0, 'can_edit' => $this->request->getPost('co_authors_can_edit') ? 1 : 0]);
+            }
+        }
+
+        $db->transComplete();
+
+        if ($db->transStatus() === false) {
+            return $this->respondWithError('A database error occurred while saving.');
+        }
+
+        // Set session success and tell Alpine to redirect!
+        session()->setFlashdata('success', $id ? 'Podcast updated successfully!' : 'Podcast published successfully!');
+        
+        if ($this->request->isAJAX()) {
+            return $this->response->setJSON(['success' => true, 'redirect' => site_url('admin/podcasts')]);
+        }
+        return redirect()->to('admin/podcasts');
+    }
+
+
+    private function processAllMedia_old($file, $slug)
+{
+    helper('media');
+    set_time_limit(300);
+    // set_time_limit(3600); // 1 hour max execution time
+    ini_set('memory_limit', '1024M');
+    $ffmpegPath = env('ffmpeg.path', 'ffmpeg');
+
+    // 1. Create a secure local sandbox for this specific upload
+    $baseDir = WRITEPATH . 'uploads/processing_' . $slug . '/';
+    $hlsHighDir = $baseDir . 'hls_high/';
+    $hlsLowDir  = $baseDir . 'hls_low/';
+    
+    if (!is_dir($hlsHighDir)) mkdir($hlsHighDir, 0777, true);
+    if (!is_dir($hlsLowDir)) mkdir($hlsLowDir, 0777, true);
+
+    register_shutdown_function(function () use ($baseDir, $slug) {
+            $error = error_get_last();
+            // Check if the script died violently due to a Fatal Error (like Timeout)
+            if ($error !== null && in_array($error['type'], [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR])) {
+                
+                log_message('error', "HARD KILL FATAL ERROR on $slug. Executing Ghost Cleanup.");
+
+                // 1. Wipe local server garbage using our new global helper
+                if (function_exists('delete_directory_safely')) {
+                    delete_directory_safely($baseDir); 
+                }
+
+                // 2. Wipe Cloudflare R2 garbage
+                try {
+                    $cloudflare = new \App\Libraries\CloudflareStorage();
+                    $cloudflare->delete("podcasts/raw/high/{$slug}.mp3");
+                    $cloudflare->delete("podcasts/raw/low/{$slug}.mp3");
+                    $cloudflare->deleteFolder("podcasts/hls/high/{$slug}/");
+                    $cloudflare->deleteFolder("podcasts/hls/low/{$slug}/");
+                } catch (\Exception $e) {
+                    log_message('error', "Cloudflare Ghost Cleanup Failed: " . $e->getMessage());
+                }
+            }
+        });
+
+    // 2. MOVE THE ORIGINAL FILE HERE SAFELY
+    // We name it 'original.mp3'. It retains 100% of its original quality.
+    $originalMp3Local = $baseDir . 'original.mp3';
+    $file->move($baseDir, 'original.mp3');
+
+    $lowMp3Local = $baseDir . 'low_quality.mp3';
+try {
+    // Helper Function to execute FFmpeg safely
+    $runFFmpeg = function($command) {
+        exec($command . " 2>&1", $output, $returnCode);
+        if ($returnCode !== 0) {
+            log_message('error', '[FFmpeg Failed] ' . implode("\n", $output));
+            throw new \Exception("Audio processing failed.");
+        }
+    };
+
+    // --- FFMPEG CONVERSIONS ---
+    
+    // A. Generate Low Quality MP3 (64k)
+    $runFFmpeg("{$ffmpegPath} -i " . escapeshellarg($originalMp3Local) . " -codec:a libmp3lame -b:a 64k " . escapeshellarg($lowMp3Local));
+
+    // B. Generate HLS High (128k Segments)
+    $runFFmpeg("{$ffmpegPath} -i " . escapeshellarg($originalMp3Local) . " -c:a aac -b:a 128k -f hls -hls_time 10 -hls_playlist_type vod -hls_segment_filename " . escapeshellarg($hlsHighDir . "seg_%03d.ts") . " " . escapeshellarg($hlsHighDir . "index.m3u8"));
+
+    // C. Generate HLS Low (64k Segments)
+    $runFFmpeg("{$ffmpegPath} -i " . escapeshellarg($originalMp3Local) . " -c:a aac -b:a 64k -f hls -hls_time 10 -hls_playlist_type vod -hls_segment_filename " . escapeshellarg($hlsLowDir . "seg_%03d.ts") . " " . escapeshellarg($hlsLowDir . "index.m3u8"));
+
+    // --- CLOUDFLARE UPLOAD LOGIC ---
+    $s3Client = new \Aws\S3\S3Client([
+        'region'      => 'auto',
+        'endpoint'    => getenv('R2_ENDPOINT'),
+        'version'     => 'latest',
+        'credentials' => [
+            'key'    => getenv('R2_ACCESS_KEY'),
+            'secret' => getenv('R2_SECRET_KEY'),
+        ],
+        'http' => [
+                'connect_timeout' => 30,
+                'timeout'         => 300, 
+            ]
+    ]);
+    
+    $bucket = getenv('R2_BUCKET');
+
+    // 1. UPLOAD THE 100% ORIGINAL MP3 (The Vault)
+    $s3Client->putObject([
+        'Bucket'      => $bucket,
+        'Key'         => "podcasts/raw/high/{$slug}.mp3",
+        'SourceFile'  => $originalMp3Local,
+        'ContentType' => 'audio/mpeg'
+    ]);
+
+    // 2. Upload the Compressed MP3
+    $s3Client->putObject([
+        'Bucket'      => $bucket,
+        'Key'         => "podcasts/raw/low/{$slug}.mp3",
+        'SourceFile'  => $lowMp3Local,
+        'ContentType' => 'audio/mpeg'
+    ]);
+
+    // 3. Upload HLS Folders
+    $this->uploadDirectoryToR2($hlsHighDir, "podcasts/hls/high/{$slug}/", $s3Client);
+    $this->uploadDirectoryToR2($hlsLowDir, "podcasts/hls/low/{$slug}/", $s3Client);
+
+    // Cleanup: Erase everything off the local server to save disk space
+    $this->recursiveDelete($baseDir);
+
+    // Return all 4 paths to be saved in the database!
+    return [
+        'master_high' => "podcasts/raw/high/{$slug}.mp3",
+        'master_low'  => "podcasts/raw/low/{$slug}.mp3",
+        'hls_high'    => "podcasts/hls/high/{$slug}/index.m3u8",
+        'hls_low'     => "podcasts/hls/low/{$slug}/index.m3u8",
+    ];
+   } catch (\Throwable $e) { // Catch Throwable to grab Fatal Errors and Exceptions!
+        
+        // ==========================================
+        // THE PROFESSIONAL ROLLBACK INITIATED
+        // ==========================================
+        log_message('error', "Media Rollback Initiated for $slug. Reason: " . $e->getMessage());
+
+        // 1. Delete Local Garbage
+        $this->recursiveDelete($baseDir);
+
+        // 2. Delete Remote Cloudflare Garbage
+        $cloudflare = new \App\Libraries\CloudflareStorage();
+        $cloudflare->delete("podcasts/raw/high/{$slug}.mp3");
+        $cloudflare->delete("podcasts/raw/low/{$slug}.mp3");
+        $cloudflare->deleteFolder("podcasts/hls/high/{$slug}/");
+        $cloudflare->deleteFolder("podcasts/hls/low/{$slug}/");
+
+        // 3. Re-throw the error so the main save() function knows to rollback the Database!
+        throw new \Exception("Processing failed and rollback executed: " . $e->getMessage());
+    }
+}
+
+private function processAllMedia($file, $slug)
+    {
+        // 0. Load our new global helper so it's available in memory
+        helper('media');
+
+        // 1. Give PHP enough time and memory for heavy audio processing
+        set_time_limit(3600); // 1 hour max execution time
+        // set_time_limit(300); // 1 hour max execution time
+
+        ini_set('memory_limit', '1024M'); // 1 GB of RAM for FFmpeg streaming
+
+        $ffmpegPath = env('ffmpeg.path', 'ffmpeg');
+
+        $baseDir = WRITEPATH . 'uploads/processing_' . $slug . '/';
+        $hlsHighDir = $baseDir . 'hls_high/';
+        $hlsLowDir  = $baseDir . 'hls_low/';
+        
+        if (!is_dir($hlsHighDir)) mkdir($hlsHighDir, 0777, true);
+        if (!is_dir($hlsLowDir)) mkdir($hlsLowDir, 0777, true);
+
+        // ==========================================
+        // THE GHOST CLEANUP (Catches Fatal Errors & Timeouts)
+        // ==========================================
+        register_shutdown_function(function () use ($baseDir, $slug) {
+            $error = error_get_last();
+            // Check if the script died violently due to a Fatal Error (like Timeout)
+            if ($error !== null && in_array($error['type'], [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR])) {
+                
+                log_message('error', "HARD KILL FATAL ERROR on $slug. Executing Ghost Cleanup.");
+
+                // 1. Wipe local server garbage using our new global helper
+                if (function_exists('delete_directory_safely')) {
+                    delete_directory_safely($baseDir); 
+                }
+
+                // 2. Wipe Cloudflare R2 garbage
+                try {
+                    $cloudflare = new \App\Libraries\CloudflareStorage();
+                    $cloudflare->delete("podcasts/raw/high/{$slug}.mp3");
+                    $cloudflare->delete("podcasts/raw/low/{$slug}.mp3");
+                    $cloudflare->deleteFolder("podcasts/hls/high/{$slug}/");
+                    $cloudflare->deleteFolder("podcasts/hls/low/{$slug}/");
+                } catch (\Exception $e) {
+                    log_message('error', "Cloudflare Ghost Cleanup Failed: " . $e->getMessage());
+                }
+            }
+        });
+        // ==========================================
+
+        $originalMp3Local = $baseDir . 'original.mp3';
+        $lowMp3Local = $baseDir . 'low_quality.mp3';
+
+        // Move original file to safety
+        $file->move($baseDir, 'original.mp3');
+
+        try {
+            // Helper Function to execute FFmpeg safely
+            $runFFmpeg = function($command) {
+                exec($command . " 2>&1", $output, $returnCode);
+                if ($returnCode !== 0) {
+                    log_message('error', '[FFmpeg Failed] ' . implode("\n", $output));
+                    throw new \Exception("Audio processing failed during FFmpeg conversion.");
+                }
+            };
+
+            // --- FFMPEG CONVERSIONS ---
+            $runFFmpeg("{$ffmpegPath} -i " . escapeshellarg($originalMp3Local) . " -codec:a libmp3lame -b:a 64k " . escapeshellarg($lowMp3Local));
+            $runFFmpeg("{$ffmpegPath} -i " . escapeshellarg($originalMp3Local) . " -c:a aac -b:a 128k -f hls -hls_time 10 -hls_playlist_type vod -hls_segment_filename " . escapeshellarg($hlsHighDir . "seg_%03d.ts") . " " . escapeshellarg($hlsHighDir . "index.m3u8"));
+            $runFFmpeg("{$ffmpegPath} -i " . escapeshellarg($originalMp3Local) . " -c:a aac -b:a 64k -f hls -hls_time 10 -hls_playlist_type vod -hls_segment_filename " . escapeshellarg($hlsLowDir . "seg_%03d.ts") . " " . escapeshellarg($hlsLowDir . "index.m3u8"));
+
+            // --- CLOUDFLARE UPLOAD LOGIC ---
+            $s3Client = new \Aws\S3\S3Client([
+                'region'      => 'auto',
+                'endpoint'    => getenv('R2_ENDPOINT'),
+                'version'     => 'latest',
+                'credentials' => [
+                    'key'    => getenv('R2_ACCESS_KEY'),
+                    'secret' => getenv('R2_SECRET_KEY'),
+                ],
+                'http' => [
+                    'connect_timeout' => 30,
+                    'timeout'         => 300, 
+                ]
+            ]);
+            
+            $bucket = getenv('R2_BUCKET');
+
+            // Upload single files
+            $s3Client->putObject(['Bucket' => $bucket, 'Key' => "podcasts/raw/high/{$slug}.mp3", 'SourceFile' => $originalMp3Local, 'ContentType' => 'audio/mpeg']);
+            $s3Client->putObject(['Bucket' => $bucket, 'Key' => "podcasts/raw/low/{$slug}.mp3", 'SourceFile' => $lowMp3Local, 'ContentType' => 'audio/mpeg']);
+
+            // Upload Folders
+            $this->uploadDirectoryToR2($hlsHighDir, "podcasts/hls/high/{$slug}/", $s3Client);
+            $this->uploadDirectoryToR2($hlsLowDir, "podcasts/hls/low/{$slug}/", $s3Client);
+
+            // Success Cleanup! Wipe local files using the global helper.
+            delete_directory_safely($baseDir);
+
+            return [
+                'master_high' => "podcasts/raw/high/{$slug}.mp3",
+                'master_low'  => "podcasts/raw/low/{$slug}.mp3",
+                'hls_high'    => "podcasts/hls/high/{$slug}/index.m3u8",
+                'hls_low'     => "podcasts/hls/low/{$slug}/index.m3u8",
+            ];
+
+        } catch (\Throwable $e) { 
+            
+            // ==========================================
+            // THE STANDARD ROLLBACK
+            // ==========================================
+            log_message('error', "Media Rollback Initiated for $slug. Reason: " . $e->getMessage());
+
+            // 1. Delete Local Garbage using the global helper
+            delete_directory_safely($baseDir);
+
+            // 2. Delete Remote Cloudflare Garbage
+            $cloudflare = new \App\Libraries\CloudflareStorage();
+            $cloudflare->delete("podcasts/raw/high/{$slug}.mp3");
+            $cloudflare->delete("podcasts/raw/low/{$slug}.mp3");
+            $cloudflare->deleteFolder("podcasts/hls/high/{$slug}/");
+            $cloudflare->deleteFolder("podcasts/hls/low/{$slug}/");
+
+            // 3. Re-throw the error so the database rolls back
+            throw new \Exception("Processing failed and rollback executed: " . $e->getMessage());
+        }
+    }
+
+private function uploadDirectoryToR2($dir, $r2Path, $client) {
+    foreach (glob($dir . "*") as $file) {
+        $client->putObject([
+            'Bucket'      => getenv('R2_BUCKET'),
+            'Key'         => $r2Path . basename($file),
+            'SourceFile'  => $file,
+            'ContentType' => (pathinfo($file, PATHINFO_EXTENSION) === 'm3u8') ? 'application/x-mpegURL' : 'video/MP2T'
+        ]);
+    }
+}
+
+/**
+ * Ensures the temporary server folder is completely wiped out
+ */
+private function recursiveDelete($dir) {
+    if (is_dir($dir)) {
+        $objects = scandir($dir);
+        foreach ($objects as $object) {
+            if ($object != "." && $object != "..") {
+                if (is_dir($dir. DIRECTORY_SEPARATOR .$object) && !is_link($dir."/".$object))
+                    $this->recursiveDelete($dir. DIRECTORY_SEPARATOR .$object);
+                else
+                    unlink($dir. DIRECTORY_SEPARATOR .$object);
+            }
+        }
+        rmdir($dir);
+    }
+}
+
     // Helper function to handle AJAX errors gracefully
     private function respondWithError($message)
     {
@@ -676,4 +1167,8 @@ private function getWizardData()
         session()->setFlashdata('success', 'Audio files successfully updated!');
         return $this->response->setJSON(['success' => true, 'redirect' => site_url('admin/podcasts')]);
     }
+
+
+
+
 }
