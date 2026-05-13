@@ -29,6 +29,7 @@ class ProcessMedia extends BaseCommand
                   ->where('status', 'pending')
                   ->where('start_time <=', date('Y-m-d H:i:s')) // Crucial!
                   ->orderBy('start_time', 'ASC') // Oldest eligible job first
+                  ->limit(1)
                   ->get()
                   ->getRow();
 

@@ -127,6 +127,7 @@ protected function getUserId()
 
     protected function formatPodcastsWithAuthors($rawPodcasts,$usehls = false)
     {
+        $usehls = true;
         if (empty($rawPodcasts)) return [];
 
         // 1. Check for the data saver flag globally!
@@ -161,11 +162,27 @@ protected function getUserId()
             
             // Apply Data Saver Logic dynamically
             $finalAudioUrl = $p['media_high_url'] ?? null;
-            if ($isDataSaver && !empty($p['media_low_url'])) {
-                $finalAudioUrl = $p['media_low_url']; 
-            }
+            
+            $rawAudioUrl = null;
 
-            $finalAudioUrl = $this->getSecureAudioUrl($finalAudioUrl);
+            if ($usehls) {
+                // User requested HLS Streaming
+                $rawAudioUrl = ($isDataSaver && !empty($p['media_low_url'])) 
+                                ? $p['media_low_url'] 
+                                : ($p['media_high_url'] ?? null);
+                $finalAudioUrl = getenv('R2_PUBLIC_URL') . '/' . $rawAudioUrl;
+            } else {
+                // User requested standard MP3
+                $rawAudioUrl = ($isDataSaver && !empty($p['master_low_url'])) 
+                                ? $p['master_low_url'] 
+                                : ($p['master_high_url'] ?? null);
+                                $finalAudioUrl = $this->getSecureAudioUrl($rawAudioUrl);
+            }
+            // if (empty($rawAudioUrl)) {
+            //     $rawAudioUrl = $p['media_high_url'] ?? $p['master_high_url'] ?? null;
+            // }
+
+            // $finalAudioUrl = $this->getSecureAudioUrl($rawAudioUrl);
 
             $formatted[] = [
                 // 'id'              => (int)$p['id'],
@@ -179,6 +196,7 @@ protected function getUserId()
                 'theme_id'        => isset($p['theme_id']) ? (int)$p['theme_id'] : null,
                 'theme_text'      => $p['theme_text'] ?? null,
                 'audio_url'       => $finalAudioUrl, // Dynamically assigned
+                'is_hls'          => $usehls,
                 'cover_url'       => $p['cover_image_url'] ?? null,
                 'listen_count'    => (int)($p['play_count'] ?? 0),
                 'like_count'      => 0,
