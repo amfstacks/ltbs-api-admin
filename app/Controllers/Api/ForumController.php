@@ -341,7 +341,7 @@ class ForumController extends BaseApiController
         $userId = $this->getUserId();
         if (!$userId) return $this->sendError('Unauthorized. Please log in.', 401);
 
-        $message = $this->request->getPost('message');
+        $message = $this->request->getVar('message');
         if (empty($message) || strlen(trim($message)) < 2) {
             return $this->sendError('Validation failed', 400, ['message' => 'Comment is too short.']);
         }
@@ -352,8 +352,8 @@ class ForumController extends BaseApiController
         $podcast = $db->table('podcasts')->where('slug', $slug)->get()->getRowArray();
         if (!$podcast) return $this->sendError('Podcast not found', 404);
 
-        $threadId = $this->request->getPost('thread_id');
-        $parentReplyId = $this->request->getPost('parent_reply_id');
+        $threadId = $this->request->getVar('thread_id');
+        $parentReplyId = $this->request->getVar('parent_reply_id');
 
         $threadModel = new ForumThreadModel();
         $replyModel = new ForumReplyModel();

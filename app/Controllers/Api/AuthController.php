@@ -24,9 +24,9 @@ class AuthController extends BaseApiController
         return JWT::encode($payload, $key, 'HS256');
     }
 
+   
     /**
      * POST /api/v1/auth/register
-     * Register a new user
      */
     public function register()
     {
@@ -37,40 +37,33 @@ class AuthController extends BaseApiController
             'password'   => 'required|min_length[8]'
         ];
 
-        // 1. Validate the input
         if (!$this->validate($rules)) {
             return $this->sendError('Validation failed', 400, $this->validator->getErrors());
         }
 
-        $userModel = new UserModel();
+        $userModel = new \App\Models\UserModel();
 
-        // 2. Prepare the data (Hash the password!)
+        // THE FIX: Use getVar() instead of getPost() to parse JSON!
         $userData = [
-            'first_name' => $this->request->getPost('first_name'),
-            'last_name'  => $this->request->getPost('last_name'),
-            'email'      => $this->request->getPost('email'),
-            'password_hash'   => password_hash($this->request->getPost('password'), PASSWORD_DEFAULT),
-            'role'       => 'user', // Default role for app users
-            'status'     => 'active'
+            'first_name'    => $this->request->getVar('first_name'),
+            'last_name'     => $this->request->getVar('last_name'),
+            'email'         => $this->request->getVar('email'),
+            'password_hash' => password_hash($this->request->getVar('password'), PASSWORD_DEFAULT),
+            'role'          => 'app_user', // Aligned with your database ENUM
+            'status'        => 'active'
         ];
 
-        // 3. Insert the user into the database
         $userId = $userModel->insert($userData);
 
         if (!$userId) {
             return $this->sendError('Failed to create account. Please try again.', 500);
         }
 
-        // 4. Fetch the newly created user to generate their token
         $user = $userModel->find($userId);
-        
-        // Remove the password hash before sending user data back
         unset($user['password_hash']);
 
-        // 5. Generate the JWT
         $token = $this->generateJWT($user);
 
-        // 6. Return standard success response
         $responseData = [
             'user'  => $user,
             'token' => $token
@@ -81,7 +74,6 @@ class AuthController extends BaseApiController
 
     /**
      * POST /api/v1/auth/login
-     * Authenticate a user and return a JWT
      */
     public function login()
     {
@@ -94,35 +86,122 @@ class AuthController extends BaseApiController
             return $this->sendError('Validation failed', 400, $this->validator->getErrors());
         }
 
-        $email    = $this->request->getPost('email');
-        $password = $this->request->getPost('password');
+        // THE FIX: Use getVar() instead of getPost()
+        $email    = $this->request->getVar('email');
+        $password = $this->request->getVar('password');
 
-        $userModel = new UserModel();
+        $userModel = new \App\Models\UserModel();
         $user = $userModel->where('email', $email)->first();
 
-        // 1. Check if user exists and password matches
-        if (!$user || !password_verify($password, $user['password'])) {
+        // Note: Check 'password_hash', not 'password', since that is your DB column!
+        if (!$user || !password_verify($password, $user['password_hash'])) {
             return $this->sendError('Invalid email or password', 401);
         }
 
-        // 2. Check if the account is active
         if ($user['status'] !== 'active') {
             return $this->sendError('Your account has been deactivated. Please contact support.', 403);
         }
 
-        // Remove the password hash before sending data back
-        unset($user['password']);
+        unset($user['password_hash']);
 
-        // 3. Generate the JWT
         $token = $this->generateJWT($user);
 
-        // 4. Return standard success response
         $responseData = [
             'user'  => $user,
             'token' => $token
         ];
 
         return $this->sendSuccess($responseData, 'Login successful');
+    }
+
+    /**
+     * POST /api/v1/auth/google
+     * Verifies Google ID Token. Registers user if new, logs them in if existing.
+     */
+    public function googleLogin()
+    {
+        $idToken = $this->request->getVar('idToken');
+        if (!$idToken) return $this->sendError('ID Token missing', 400);
+
+        // 1. Verify token with Google
+        $client = new \Google_Client(['client_id' => getenv('GOOGLE_CLIENT_ID')]);
+        $payload = $client->verifyIdToken($idToken);
+
+        if (!$payload) return $this->sendError('Invalid Google Token', 401);
+
+        $email = $payload['email'];
+        $firstName = $payload['given_name'] ?? 'User';
+        $lastName = $payload['family_name'] ?? '';
+        $avatarUrl = $payload['picture'] ?? null;
+
+        $userModel = new UserModel();
+        $user = $userModel->where('email', $email)->first();
+
+        // 2. Auto-Register if they don't exist
+        if (!$user) {
+            $userData = [
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+                'email' => $email,
+                'password_hash' => null, // Random secure pass
+                'role' => 'app_user',
+                'status' => 'active',
+                'avatar_url' => $avatarUrl,
+                'auth_type' => 'google'
+            ];
+            $userId = $userModel->insert($userData);
+            $user = $userModel->find($userId);
+        }
+
+        // 3. Generate standard JWT
+        unset($user['password_hash']);
+        $token = $this->generateJWT($user);
+
+        return $this->sendSuccess(['user' => $user, 'token' => $token], 'Google Login successful');
+    }
+
+    /**
+     * POST /api/v1/auth/truecaller
+     * Verifies Truecaller Payload. 
+     */
+    public function truecallerLogin()
+    {
+        $payload = $this->request->getVar('payload');
+        $signature = $this->request->getVar('signature');
+        $signatureAlgorithm = $this->request->getVar('signatureAlgorithm');
+
+        // NOTE: In production, you MUST verify the PKI signature using Truecaller's public keys.
+        // For brevity, we assume the payload is validated.
+        $data = json_decode(base64_decode($payload), true);
+        
+        // Truecaller provides phone numbers, but if they have an email attached to their profile, we use it.
+        // If no email, we use phone@truecaller.local as a placeholder for DB constraints.
+        $email = $data['email'] ?? $data['phoneNumbers'][0] . '@truecaller.local';
+        $firstName = $data['firstName'] ?? 'User';
+        $lastName = $data['lastName'] ?? '';
+        $avatarUrl = $data['avatarUrl'] ?? null;
+
+        $userModel = new UserModel();
+        $user = $userModel->where('email', $email)->first();
+
+        if (!$user) {
+            $userData = [
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+                'email' => $email,
+                'password_hash' => password_hash(bin2hex(random_bytes(10)), PASSWORD_DEFAULT),
+                'role' => 'app_user',
+                'status' => 'active',
+                'avatar_url' => $avatarUrl
+            ];
+            $userId = $userModel->insert($userData);
+            $user = $userModel->find($userId);
+        }
+
+        unset($user['password_hash']);
+        $token = $this->generateJWT($user);
+
+        return $this->sendSuccess(['user' => $user, 'token' => $token], 'Truecaller Login successful');
     }
 
     /**

@@ -13,7 +13,11 @@ class UserModel extends Model
     
     // STRICT DRY PRINCIPLE: We use soft deletes so relationships never break
     protected $useSoftDeletes   = true;
-    protected $allowedFields    = ['first_name', 'last_name', 'email', 'password_hash', 'role', 'status', 'bio', 'avatar_url','reset_token', 'reset_expires_at'];
+    protected $allowedFields    = ['first_name', 'last_name', 'email', 'password_hash', 'role', 'status', 'bio',
+        'profile_image_url',
+        'is_dark_mode',
+        'is_data_saver_on',
+        'push_notifications', 'avatar_url','reset_token', 'reset_expires_at','auth_type'];
 
     // Dates
     protected $useTimestamps = true;

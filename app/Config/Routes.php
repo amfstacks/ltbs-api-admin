@@ -91,6 +91,9 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($rout
     $routes->post('auth/register', 'AuthController::register');
     $routes->post('auth/login', 'AuthController::login');
     $routes->post('auth/logout', 'AuthController::logout', ['filter' => 'jwt']);
+
+    $routes->post('auth/google', 'AuthController::googleLogin');
+    $routes->post('auth/truecaller', 'AuthController::truecallerLogin');
     
     // Discovery
     $routes->get('discovery/home', 'DiscoveryController::home');
@@ -127,6 +130,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($rout
         $routes->post('profile/update', 'ProfileController::updateProfile');
         $routes->post('profile/avatar', 'ProfileController::uploadAvatar');
         $routes->post('auth/logout', 'AuthController::logout');
+        $routes->post('profile/password', 'ProfileController::updatePassword');
 
         // Library (Bookmarks)
         $routes->get('library/bookmarks', 'LibraryController::bookmarks');
@@ -135,8 +139,10 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($rout
         $routes->post('library/downloads/track/(:segment)', 'LibraryController::trackDownload/$1');
         
         // Forums (Write Access)
-        $routes->post('forums/(:num)/comments', 'ForumController::createComment/$1');
+        // $routes->post('forums/(:num)/comments', 'ForumController::createComment/$1');
         $routes->post('forums/(:segment)/comments', 'ForumController::createComment/$1');
+
+        $routes->post('profile/settings', 'ProfileController::updateSettings');
     });
 
 });
