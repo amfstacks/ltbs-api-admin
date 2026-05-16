@@ -182,7 +182,13 @@ protected function getUserId()
             //     $rawAudioUrl = $p['media_high_url'] ?? $p['master_high_url'] ?? null;
             // }
 
-            // $finalAudioUrl = $this->getSecureAudioUrl($rawAudioUrl);
+            // $download_url = $this->getSecureAudioUrl($rawAudioUrl);
+            $mp3Path = ($isDataSaver && !empty($p['master_low_url'])) 
+                        ? $p['master_low_url'] 
+                        : ($p['master_high_url'] ?? null);
+                        
+        // Calls your AWS SDK method to generate the 2-hour link
+        $downloadUrl = $this->getSecureAudioUrl($mp3Path);
 
             $formatted[] = [
                 // 'id'              => (int)$p['id'],
@@ -196,6 +202,7 @@ protected function getUserId()
                 'theme_id'        => isset($p['theme_id']) ? (int)$p['theme_id'] : null,
                 'theme_text'      => $p['theme_text'] ?? null,
                 'audio_url'       => $finalAudioUrl, // Dynamically assigned
+                'download_url'    => $downloadUrl, // Dynamically assigned
                 'is_hls'          => $usehls,
                 'cover_url'       => $p['cover_image_url'] ?? null,
                 'listen_count'    => (int)($p['play_count'] ?? 0),

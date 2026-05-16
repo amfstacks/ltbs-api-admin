@@ -99,6 +99,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($rout
     $routes->get('discovery/home', 'DiscoveryController::home');
     $routes->get('categories', 'DiscoveryController::categories');
     $routes->get('themes', 'DiscoveryController::themes');
+    $routes->get('authors', 'AuthorController::index');
     
     // Podcasts & Media
     $routes->get('podcasts', 'PodcastController::index');
@@ -143,6 +144,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($rout
         $routes->post('forums/(:segment)/comments', 'ForumController::createComment/$1');
 
         $routes->post('profile/settings', 'ProfileController::updateSettings');
+        
     });
 
 });
