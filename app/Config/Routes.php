@@ -135,8 +135,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($rout
 
         // Library (Bookmarks)
         $routes->get('library/bookmarks', 'LibraryController::bookmarks');
-        $routes->post('library/bookmarks/toggle/(:num)', 'LibraryController::toggleBookmark/$1');
-        $routes->post('library/like/toggle/(:num)', 'LibraryController::toggleLike/$1');
+        $routes->post('library/bookmarks/toggle/(:segment)', 'LibraryController::toggleBookmark/$1');
+        $routes->post('library/like/toggle/(:segment)', 'LibraryController::toggleLike/$1');
         $routes->post('library/downloads/track/(:segment)', 'LibraryController::trackDownload/$1');
         
         // Forums (Write Access)

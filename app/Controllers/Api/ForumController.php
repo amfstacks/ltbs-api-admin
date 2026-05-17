@@ -31,38 +31,34 @@ class ForumController extends BaseApiController
      * GET /api/v1/forums?page=1
      * Fetches a paginated list of podcasts that have active forum threads.
      */
-    public function index()
+   public function index()
     {
+        $page = (int) ($this->request->getVar('page') ?? 1);
         $podcastModel = new PodcastModel();
 
-        // Fetch podcasts and calculate total interactions (Threads + Replies) on the fly!
         $rawPodcasts = $podcastModel
             ->select('podcasts.*, categories.name as category_name, themes.name as theme_text')
-            // Count Threads
-            ->select('(SELECT COUNT(*) FROM forum_threads WHERE forum_threads.podcast_id = podcasts.id AND forum_threads.deleted_at IS NULL) as thread_count')
-            // Count all replies across all threads for this podcast
-            ->select('(SELECT COUNT(*) FROM forum_replies WHERE thread_id IN (SELECT id FROM forum_threads WHERE podcast_id = podcasts.id AND deleted_at IS NULL) AND deleted_at IS NULL) as reply_count')
             ->join('categories', 'categories.id = podcasts.category_id', 'left')
             ->join('themes', 'themes.id = podcasts.theme_id', 'left')
             ->where('podcasts.status', 'published')
-            ->having('thread_count >', 0) // Only load active forums!
+            // 👉 THE MAGIC: Just check the column directly!
+            ->where('podcasts.comment_count >', 0) 
             ->orderBy('podcasts.created_at', 'DESC')
-            ->paginate(15);
+            ->paginate(15, 'default', $page); 
 
         $pager = $podcastModel->pager;
 
-        // Use our base formatting engine
-        $formattedPodcasts = $this->formatPodcastsWithAuthors($rawPodcasts);
-
-        // Inject the combined total comments count into the payload
-        foreach ($formattedPodcasts as $index => $fp) {
-            $formattedPodcasts[$index]['total_comments'] = (int)$rawPodcasts[$index]['thread_count'] + (int)$rawPodcasts[$index]['reply_count'];
+        if ($page > $pager->getPageCount()) {
+            $rawPodcasts = [];
         }
+
+        // Your formatter natively grabs the 'comment_count' from the podcasts table!
+        $formattedPodcasts = $this->formatPodcastsWithAuthors($rawPodcasts);
 
         $payload = [
             'podcasts'   => $formattedPodcasts,
             'pagination' => [
-                'current_page' => $pager->getCurrentPage(),
+                'current_page' => $page,
                 'total_pages'  => $pager->getPageCount(),
                 'total_items'  => $pager->getTotal(),
                 'per_page'     => $pager->getPerPage()
@@ -393,6 +389,11 @@ class ForumController extends BaseApiController
             // Update thread timestamp so it bumps to the top of the Admin Inbox!
             $threadModel->update($threadId, ['status' => 'open']);
         }
+        // Inside your code where a user creates a new forum comment/thread:
+    $db->table('podcasts')
+   ->where('slug', $slug)
+   ->set('comment_count', 'comment_count+1', FALSE)
+   ->update();
 
         $db->transComplete();
 

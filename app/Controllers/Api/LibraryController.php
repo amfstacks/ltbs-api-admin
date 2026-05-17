@@ -77,7 +77,9 @@ class LibraryController extends BaseApiController
      */
     public function toggleBookmark($slug)
     {
-        $userId = $this->getUserId();
+        $userId = $this->getUserId(); // Fails if not logged in
+        if (!$userId) return $this->sendError('Please login to bookmark this teaching.', 401);
+
         $db = \Config\Database::connect();
         
         // 1. Get the podcast ID from the slug
@@ -86,30 +88,54 @@ class LibraryController extends BaseApiController
             return $this->sendError('Teaching not found', 404);
         }
 
+        $podcastId = $podcast['id'];
+
+        // 👉 Start Transaction to ensure both tables update perfectly or not at all
+        $db->transStart();
+
         // 2. Check if it is already bookmarked
         $existing = $db->table('bookmarks')
-            ->where('user_id', $userId)
-            ->where('podcast_id', $podcast['id'])
-            ->get()->getRowArray();
+            ->where(['user_id' => $userId, 'podcast_id' => $podcastId])
+            ->countAllResults();
 
-        if ($existing) {
-            // Remove Bookmark
-            $db->table('bookmarks')->where(['user_id' => $userId, 'podcast_id' => $podcast['id']])->delete();
-            return $this->sendSuccess(['is_bookmarked' => false], 'Removed from library');
+        if ($existing > 0) {
+            // REMOVE BOOKMARK: Delete record and decrement count
+            $db->table('bookmarks')->where(['user_id' => $userId, 'podcast_id' => $podcastId])->delete();
+            $db->table('podcasts')->where('id', $podcastId)->set('bookmark_count', 'bookmark_count-1', FALSE)->update();
+            
+            $isBookmarked = false;
+            $message = 'Removed from library';
         } else {
-            // Add Bookmark
-            $db->table('bookmarks')->insert(['user_id' => $userId, 'podcast_id' => $podcast['id']]);
-            return $this->sendSuccess(['is_bookmarked' => true], 'Added to library');
+            // ADD BOOKMARK: Insert record and increment count
+            $db->table('bookmarks')->insert(['user_id' => $userId, 'podcast_id' => $podcastId]);
+            $db->table('podcasts')->where('id', $podcastId)->set('bookmark_count', 'bookmark_count+1', FALSE)->update();
+            
+            $isBookmarked = true;
+            $message = 'Added to library';
         }
+
+        // 👉 Commit Transaction
+        $db->transComplete();
+
+        // Safety check if the database locked up
+        if ($db->transStatus() === FALSE) {
+            return $this->sendError('Database error occurred while updating bookmark status.', 500);
+        }
+
+        return $this->sendSuccess(['is_bookmarked' => $isBookmarked], $message);
     }
 
-    /**
-     * GET /api/v1/library/bookmarks
-     * Fetches all teachings the user has saved
+   /**
+     * GET /api/v1/library/bookmarks?page=1
+     * Fetches paginated teachings the user has saved
      */
     public function bookmarks()
     {
         $userId = $this->getUserId();
+        
+        // 👉 FIX 1: Manually capture the page from the Flutter URL request
+        $page = (int) ($this->request->getVar('page') ?? 1);
+
         $podcastModel = new PodcastModel();
 
         // Join the bookmarks table to filter only saved items
@@ -120,13 +146,32 @@ class LibraryController extends BaseApiController
             ->join('themes', 'themes.id = podcasts.theme_id', 'left')
             ->where('bookmarks.user_id', $userId)
             ->where('podcasts.status', 'published')
-            ->orderBy('bookmarks.created_at', 'DESC') // Newest bookmarks first
-            ->findAll();
+            ->orderBy('bookmarks.created_at', 'DESC') 
+            // 👉 FIX 2: Replace findAll() with paginate()
+            ->paginate(15, 'default', $page); 
+
+        $pager = $podcastModel->pager;
+
+        // 👉 FIX 3: The Out-Of-Bounds Safety Net
+        if ($page > $pager->getPageCount()) {
+            $rawPodcasts = [];
+        }
 
         // Pass through our Base Controller formatting engine!
         $formattedPodcasts = $this->formatPodcastsWithAuthors($rawPodcasts);
 
-        return $this->sendSuccess(['podcasts' => $formattedPodcasts], 'Bookmarks loaded successfully');
+        // 👉 FIX 4: Assemble the Payload properly so Flutter's generic helper can read it
+        $payload = [
+            'podcasts'   => $formattedPodcasts,
+            'pagination' => [
+                'current_page' => $page,
+                'total_pages'  => $pager->getPageCount(),
+                'total_items'  => $pager->getTotal(),
+                'per_page'     => $pager->getPerPage()
+            ]
+        ];
+
+        return $this->sendSuccess($payload, 'Bookmarks loaded successfully');
     }
 
     /**

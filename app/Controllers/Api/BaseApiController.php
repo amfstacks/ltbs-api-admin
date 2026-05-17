@@ -156,6 +156,34 @@ protected function getUserId()
             ];
         }
 
+        $userId =  $this->getUserId(); // Ensure your getUserId() doesn't throw a 401 for guests!
+    
+    $userLikes = [];
+    $userBookmarks = [];
+
+    if ($userId && !empty($podcastIds)) {
+        // Fetch all likes for this user for just these 15 podcasts
+        $likes = $db->table('podcast_likes')
+                    ->select('podcast_id')
+                    ->where('user_id', $userId)
+                    ->whereIn('podcast_id', $podcastIds)
+                    ->get()
+                    ->getResultArray();
+        
+        // Converts array of arrays to a simple list of IDs: [1, 5, 12]
+        $userLikes = array_column($likes, 'podcast_id');
+
+        // Fetch all bookmarks for this user
+        $bookmarks = $db->table('bookmarks')
+                    ->select('podcast_id')
+                    ->where('user_id', $userId)
+                    ->whereIn('podcast_id', $podcastIds)
+                    ->get()
+                    ->getResultArray();
+        
+        $userBookmarks = array_column($bookmarks, 'podcast_id');
+    }
+
         // 3. Format to perfectly match the Flutter AudioModel
         $formatted = [];
         foreach ($rawPodcasts as $p) {
@@ -206,9 +234,12 @@ protected function getUserId()
                 'is_hls'          => $usehls,
                 'cover_url'       => $p['cover_image_url'] ?? null,
                 'listen_count'    => (int)($p['play_count'] ?? 0),
-                'like_count'      => 0,
-                'comment_count'   => 0,
+                'like_count'      => (int)($p['like_count'] ?? 0),
+                'bookmark_count'  => (int)($p['bookmark_count'] ?? 0),
+                'comment_count'   => (int)($p['comment_count'] ?? 0),
                 'reshare_count'   => 0,
+                'is_liked'        => in_array($p['id'], $userLikes),
+                'is_bookmarked'   => in_array($p['id'], $userBookmarks),
             ];
         }
 
