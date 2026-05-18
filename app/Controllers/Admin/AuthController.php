@@ -29,7 +29,7 @@ class AuthController extends BaseController
         if ($user && password_verify($password, $user['password_hash'])) {
             
             // 2. Check if they have admin privileges
-            if (in_array($user['role'], ['superadmin', 'author'])) {
+            if (in_array($user['role'], ['superadmin', 'author','reviewer'])) {
                 
                 // 3. Check if account is active
                 if ($user['status'] !== 'active') {
@@ -44,7 +44,7 @@ class AuthController extends BaseController
                     'is_logged_in'  => true
                 ];
                 session()->set($sessionData);
-
+// exit('a');
                 return redirect()->to('admin/dashboard')->with('success', 'Welcome back, ' . $user['first_name']);
             }
         }

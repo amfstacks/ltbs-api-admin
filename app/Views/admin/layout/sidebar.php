@@ -11,7 +11,19 @@
             <i class="ph ph-squares-four text-xl mr-3 <?= url_is('admin/dashboard') ? 'text-navy-900' : 'text-gray-400' ?>"></i>
             Dashboard
         </a>
+<?php if(in_array(session()->get('role'), ['reviewer', 'superadmin'])): ?>
+            <div class="pt-4 pb-1">
+                <p class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Quality Control</p>
+            </div>
 
+            <a href="<?= site_url('admin/reviews') ?>" class="flex items-center px-3 py-2.5 rounded-lg transition-colors <?= url_is('admin/reviews*') ? 'bg-gold-500 text-navy-900 font-bold shadow-md' : 'hover:bg-navy-800 hover:text-white' ?>">
+                <div class="relative">
+                    <i class="ph ph-headphones text-xl mr-3 <?= url_is('admin/reviews*') ? 'text-navy-900' : 'text-gray-400' ?>"></i>
+                    <span class="absolute -top-1 -right-1 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-navy-900"></span>
+                </div>
+                Review Queue
+            </a>
+        <?php endif; ?>
        <!-- Content Management Section -->
         <div class="pt-4 pb-1">
             <p class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Content</p>

@@ -71,6 +71,10 @@ $routes->group('admin', function($routes) {
         $routes->get('podcasts/media/([0-9]+)', 'Admin\PodcastController::media/$1');
         $routes->post('podcasts/update-media/([0-9]+)', 'Admin\PodcastController::updateMedia/$1');
 
+
+        $routes->get('reviews', 'Admin\ReviewController::index');
+        $routes->get('reviews/process/(:num)', 'Admin\ReviewController::process/$1');
+
     });
 
     

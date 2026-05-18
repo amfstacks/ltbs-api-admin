@@ -35,6 +35,7 @@
             <label class="block text-sm font-medium text-gray-700 mb-1">Platform Role <span class="text-red-500">*</span></label>
             <select name="role" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
                 <option value="author">Author (Can upload and edit their own podcasts)</option>
+                <option value="reviewer">Reviewer (Can review and approve pending podcasts)</option>
                 <option value="superadmin">Super Admin (Can manage everything)</option>
             </select>
         </div>
