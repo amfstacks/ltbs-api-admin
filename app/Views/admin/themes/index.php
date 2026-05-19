@@ -30,7 +30,7 @@
                 <tr class="hover:bg-gray-50 transition-colors">
                     <td class="px-6 py-4 whitespace-nowrap">
                         <?php if($theme['icon_url']): ?>
-                            <img src="<?= $theme['icon_url'] ?>" alt="icon" class="h-10 w-10 rounded bg-navy-900 object-cover">
+                            <img src="<?= media_url($theme['icon_url'], strtotime($theme['updated_at'])) ?>" alt="icon" class="h-10 w-10 rounded bg-navy-900 object-cover">
                         <?php else: ?>
                             <div class="h-10 w-10 rounded bg-gray-100 flex items-center justify-center text-gray-400">
                                 <i class="ph ph-image text-xl"></i>

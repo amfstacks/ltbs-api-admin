@@ -85,8 +85,13 @@ class CategoryController extends BaseController
             'name' => $name,
             // 'slug' => strtolower(url_title($name)) // Auto-generates the slug!
         ];
+        $oldCategory = $id ? $this->categoryModel->find($id) : null;
         if (!$id) {
-            $saveData['slug'] = strtolower(url_title($name));
+            // $saveData['slug'] = strtolower(url_title($name));
+            $slug = strtolower(url_title($name));
+            $saveData['slug'] = $slug;
+        }else{
+            $slug = $oldCategory['slug'] ?? strtolower(url_title($name));
         }
 
         // Fetch the OLD category data if updating
@@ -95,21 +100,58 @@ class CategoryController extends BaseController
         // --------------------------------------------------------------------
         // CLOUDFLARE R2: Handle Icon Upload & Deletion
         // --------------------------------------------------------------------
+        // $file = $this->request->getFile('icon');
+        // if ($file && $file->isValid() && !$file->hasMoved()) {
+            
+        //     $cloudflare = new \App\Libraries\CloudflareStorage();
+        //     $iconUrl = $cloudflare->upload($file, 'categories/icons',$slug); 
+            
+        //     if ($iconUrl) {
+        //         $saveData['icon_url'] = $iconUrl;
+                
+        //         // If updating, delete the OLD icon from Cloudflare
+        //         if ($oldCategory && !empty($oldCategory['icon_url'])) {
+        //             $cloudflare->delete($oldCategory['icon_url']);
+        //         }
+        //     } else {
+        //         return redirect()->back()->withInput()->with('error', 'Failed to upload category icon to the cloud.');
+        //     }
+        // }
+        // --------------------------------------------------------------------
+        // COMPRESSION & UPLOAD LOGIC
+        // --------------------------------------------------------------------
         $file = $this->request->getFile('icon');
         if ($file && $file->isValid() && !$file->hasMoved()) {
             
-            $cloudflare = new \App\Libraries\CloudflareStorage();
-            $iconUrl = $cloudflare->upload($file, 'categories/icons'); 
+            // 1. Grab the temporary raw file from PHP
+            $tempPath = $file->getTempName();
             
-            if ($iconUrl) {
-                $saveData['icon_url'] = $iconUrl;
+            // 2. Compress it to WebP (Max width 800px, 80% Quality)
+            $optimizer = new \App\Libraries\ImageOptimizer();
+            $optimizedPath = $optimizer->optimizeToWebp($tempPath, 800, 80);
+
+            if ($optimizedPath) {
+                $cloudflare = new \App\Libraries\CloudflareStorage();
                 
-                // If updating, delete the OLD icon from Cloudflare
-                if ($oldCategory && !empty($oldCategory['icon_url'])) {
-                    $cloudflare->delete($oldCategory['icon_url']);
+                // 3. Upload the optimized version! Force the .webp extension on the slug.
+                $newIconName = $slug . '.webp';
+                $iconUrl = $cloudflare->uploadOptimized($optimizedPath, 'categories/icons', $newIconName); 
+                
+                if ($iconUrl) {
+                    $saveData['icon_url'] = $iconUrl;
+                    
+                    // 4. Delete the old icon if the name changed (e.g., moving from .png to .webp)
+                    if ($oldCategory && !empty($oldCategory['icon_url']) && $oldCategory['icon_url'] !== $iconUrl) {
+                        $cloudflare->delete($oldCategory['icon_url']);
+                    }
+                } else {
+                    return redirect()->back()->withInput()->with('error', 'Failed to upload optimized icon to the cloud.');
                 }
+                
+                // 5. IMPORTANT: Delete the local temp optimized file so it doesn't clog your server!
+                unlink($optimizedPath);
             } else {
-                return redirect()->back()->withInput()->with('error', 'Failed to upload category icon to the cloud.');
+                return redirect()->back()->withInput()->with('error', 'Failed to optimize the image. Unsupported format.');
             }
         }
 

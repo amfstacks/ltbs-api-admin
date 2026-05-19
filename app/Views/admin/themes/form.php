@@ -22,7 +22,7 @@
         </div>
 
         <!-- <div x-data="{ imageUrl: '<?= isset($theme['icon_url']) && $theme['icon_url'] ? base_url($theme['icon_url']) : '' ?>' }"> -->
-        <div x-data="{ imageUrl: '<?= isset($theme) && !empty($theme['icon_url']) ? (str_starts_with($theme['icon_url'], 'http') ? esc($theme['icon_url'], 'js') : base_url($theme['icon_url'])) : '' ?>' }">   
+        <div x-data="{ imageUrl: '<?= isset($theme) && !empty($theme['icon_url']) ? (str_starts_with($theme['icon_url'], 'http') ? esc($theme['icon_url'], 'js') : media_url($theme['icon_url'])) : '' ?>' }">   
         <label class="block text-sm font-medium text-gray-700 mb-1">Theme Icon (Optional)</label>
             <div class="mt-1 flex items-center space-x-6">
                 <div class="h-16 w-16 bg-gray-100 rounded-lg border border-gray-200 overflow-hidden flex items-center justify-center">

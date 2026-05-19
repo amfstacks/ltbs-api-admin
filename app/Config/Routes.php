@@ -75,6 +75,26 @@ $routes->group('admin', function($routes) {
         $routes->get('reviews', 'Admin\ReviewController::index');
         $routes->get('reviews/process/(:num)', 'Admin\ReviewController::process/$1');
 
+        // AJAX API Routes for the Review Room
+        $routes->get('reviews/api/notes/(:num)', 'Admin\ReviewController::getNotes/$1');
+        $routes->post('reviews/api/notes/(:num)', 'Admin\ReviewController::addNote/$1');
+        
+        $routes->get('reviews/api/chats/(:num)', 'Admin\ReviewController::getChats/$1');
+        $routes->post('reviews/api/chats/(:num)', 'Admin\ReviewController::addChat/$1');
+        
+        $routes->post('reviews/api/decision/(:num)', 'Admin\ReviewController::submitDecision/$1');
+
+
+
+
+        // --- Quality Control: History & Guidelines ---
+        $routes->get('reviews/history', 'Admin\ReviewController::history');
+        $routes->get('reviews/guidelines', 'Admin\ReviewController::guidelines');
+
+        // --- Quality Control: Community Moderation ---
+        $routes->get('moderation/flagged', 'Admin\ModerationController::index');
+        $routes->post('moderation/resolve/(:num)', 'Admin\ModerationController::resolve/$1');
+
     });
 
     

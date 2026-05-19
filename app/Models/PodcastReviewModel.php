@@ -12,7 +12,7 @@ class PodcastReviewModel extends Model
     protected $returnType       = 'array';
     protected $useSoftDeletes   = false;
     protected $protectFields    = true;
-    protected $allowedFields    = ['podcast_id', 'user_id', 'status'];
+    protected $allowedFields    = ['podcast_id', 'user_id', 'status','notes'];
 
     // Dates
     protected $useTimestamps = true;

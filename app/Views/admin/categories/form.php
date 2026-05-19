@@ -22,7 +22,7 @@
         </div>
 
 
-            <div x-data="{ imageUrl: '<?= isset($category) && !empty($category['icon_url']) ? (str_starts_with($category['icon_url'], 'http') ? esc($category['icon_url'], 'js') : base_url($category['icon_url'])) : '' ?>' }">
+            <div x-data="{ imageUrl: '<?= isset($category) && !empty($category['icon_url']) ? (str_starts_with($category['icon_url'], 'http') ? esc($category['icon_url'], 'js') : media_url($category['icon_url'])) : '' ?>' }">
             <label class="block text-sm font-medium text-gray-700 mb-1">Category Icon (Optional)</label>
             
             <div class="mt-1 flex items-center space-x-6">

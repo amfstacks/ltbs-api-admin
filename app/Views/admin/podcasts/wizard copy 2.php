@@ -19,7 +19,7 @@
     // Variables
     title: '<?= isset($podcast) ? esc($podcast['title'], 'js') : '' ?>',
     categoryId: '<?= isset($podcast) ? $podcast['category_id'] : '' ?>',
-    coverImageUrl: '<?= isset($podcast) && !empty($podcast['cover_image_url']) ? (str_starts_with($podcast['cover_image_url'], 'http') ? esc($podcast['cover_image_url'], 'js') : media_url($podcast['cover_image_url'])) : '' ?>',
+    coverImageUrl: '<?= isset($podcast) && !empty($podcast['cover_image_url']) ? (str_starts_with($podcast['cover_image_url'], 'http') ? esc($podcast['cover_image_url'], 'js') : base_url($podcast['cover_image_url'])) : '' ?>',
     isUpdate: <?= isset($podcast) ? 'true' : 'false' ?>,
     
     nextStep() {
@@ -193,16 +193,16 @@
 
                 <?php if(!isset($podcast)): ?>
                     <div class="p-5 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
-                        <p class="text-sm font-medium text-navy-900 mb-4"><i class="ph-fill ph-cloud-arrow-up text-blue-500 mr-1.5"></i> Upload MP3 Audio File</p>
+                        <p class="text-sm font-medium text-navy-900 mb-4"><i class="ph-fill ph-cloud-arrow-up text-blue-500 mr-1.5"></i> Upload MP3 Audio Files</p>
                         <div class="space-y-5">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">High Quality File (320kbps MP3) <span class="text-red-500">*</span></label>
                                 <input type="file" x-ref="mediaHighInput" name="media_high" accept="audio/mpeg, audio/mp3" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-gold-50 file:text-gold-700 hover:file:bg-gold-100 border border-gray-300 rounded-md bg-white">
                             </div>
-                            <!-- <div>
+                            <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Data Saver File (64kbps AAC/M4A) <span class="text-xs text-gray-400 font-normal">- Optional</span></label>
                                 <input type="file" name="media_low" accept="audio/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-gray-200 file:text-gray-700 hover:file:bg-gray-300 border border-gray-300 rounded-md bg-white">
-                            </div> -->
+                            </div>
                         </div>
                     </div>
                 <?php else: ?>
@@ -221,42 +221,26 @@
         <div x-show="step === 3" style="display: none;" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
             <h3 class="text-xl font-bold text-navy-900 mb-6 border-b pb-2">3. Authors & Permissions</h3>
             <div class="space-y-5">
-               <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Primary Author / Teacher <span class="text-red-500">*</span></label>
-                    
-                    <?php if(session()->get('role') === 'superadmin'): ?>
-                        <select name="primary_author_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
-                            <?php foreach($authors as $author): ?>
-                                <option value="<?= $author['id'] ?>" <?= (isset($primary_author_id) && $primary_author_id == $author['id']) || (!isset($primary_author_id) && session()->get('user_id') == $author['id']) ? 'selected' : '' ?>>
-                                    <?= esc($author['first_name'] . ' ' . $author['last_name']) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    <?php else: ?>
-                        <input type="hidden" name="primary_author_id" value="<?= session()->get('user_id') ?>">
-                        <div class="w-full px-4 py-2 border border-gray-200 bg-gray-50 rounded-lg text-gray-500 font-medium cursor-not-allowed flex items-center shadow-inner">
-                            <i class="ph-fill ph-lock-key mr-2 text-gray-400"></i>
-                            <?= esc(session()->get('first_name') . ' ' . session()->get('last_name')) ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-
-               <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Add Co-Authors (Optional)</label>
-                    
-                    <select name="co_authors[]" multiple class="select2-multiple w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Primary Author / Teacher</label>
+                    <select name="primary_author_id"  class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
                         <?php foreach($authors as $author): ?>
-                            
-                            <?php 
-                                // EXCLUDE THE CURRENT LOGGED-IN USER FROM THIS LIST
-                                if($author['id'] == session()->get('user_id')) continue; 
-                            ?>
-                            
-                            <option value="<?= $author['id'] ?>"><?= esc($author['first_name'] . ' ' . $author['last_name']) ?></option>
-                        
+                            <option value="<?= $author['id'] ?>" <?= (isset($primary_author_id) && $primary_author_id == $author['id']) || (!isset($primary_author_id) && session()->get('user_id') == $author['id']) ? 'selected' : '' ?>>
+                                <?= esc($author['first_name'] . ' ' . $author['last_name']) ?>
+                            </option>
                         <?php endforeach; ?>
                     </select>
-                    <p class="text-xs text-gray-500 mt-1">Search and select any additional teachers involved.</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Add Co-Authors (Optional)</label>
+                    <!-- Make sure the co-authors logic matches what you have in your controller for updates! -->
+                    <select name="co_authors[]" multiple class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500 h-24">
+                        <?php foreach($authors as $author): ?>
+                            <option value="<?= $author['id'] ?>"><?= esc($author['first_name'] . ' ' . $author['last_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">Hold Ctrl (Windows) or Cmd (Mac) to select multiple.</p>
                 </div>
 
                 <div class="flex items-center mt-4">
@@ -267,7 +251,7 @@
         </div>
 
         <!-- STEP 4: PUBLISH STATUS -->
-        <!-- <div x-show="step === 4" style="display: none;" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
+        <div x-show="step === 4" style="display: none;" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
             <h3 class="text-xl font-bold text-navy-900 mb-6 border-b pb-2">4. Publish</h3>
             <div class="space-y-5">
                 <div>
@@ -282,48 +266,8 @@
                 <i class="ph-fill ph-check-circle text-navy-900 text-xl mr-3 mt-0.5"></i>
                 <p class="text-sm text-navy-900">You are ready! Ensure your files are selected. Please do not close the window once you click Save & Upload, as the files need time to sync to the Cloud.</p>
             </div>
-        </div> -->
-<div x-show="step === 4" style="display: none;" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
-            <h3 class="text-xl font-bold text-navy-900 mb-6 border-b pb-2">4. Finalize & Submit</h3>
-             <?php if(!isset($podcast)): ?>
-            <div class="space-y-4">
-                <label class="flex items-start p-4 border border-gold-500 bg-gold-50/30 rounded-xl cursor-pointer transition-colors hover:bg-gold-50">
-                    <div class="flex-shrink-0 mt-0.5">
-                        <input type="radio" name="status" value="processing" checked class="w-5 h-5 text-gold-600 focus:ring-gold-500 border-gray-300">
-                    </div>
-                    <div class="ml-4">
-                        <span class="block text-sm font-bold text-navy-900">Submit for Processing & Review</span>
-                        <span class="block text-xs text-gray-600 mt-1">Our servers will optimize your audio (HLS/Data Saver). Once complete, it will automatically be sent to the Admin team for QA review.</span>
-                    </div>
-                </label>
-
-                <label class="flex items-start p-4 border border-gray-200 rounded-xl cursor-pointer transition-colors hover:bg-gray-50">
-                    <div class="flex-shrink-0 mt-0.5">
-                        <input type="radio" name="status" value="draft" class="w-5 h-5 text-navy-900 focus:ring-navy-900 border-gray-300">
-                    </div>
-                    <div class="ml-4">
-                        <span class="block text-sm font-bold text-navy-900">Save as Draft (Do Not Process)</span>
-                        <span class="block text-xs text-gray-500 mt-1">Upload the files and save your text, but do not start server processing or alert reviewers yet.</span>
-                    </div>
-                </label>
-            </div>
-
-            <div class="mt-6 bg-navy-50 p-4 rounded-lg border border-navy-100 flex items-start">
-                <i class="ph-fill ph-info text-navy-900 text-xl mr-3 mt-0.5"></i>
-                <p class="text-sm text-navy-900 leading-relaxed">
-                    <strong>Note on Uploading:</strong> Please do not close this window once you click "Save & Upload". Heavy audio files require time to safely sync to our secure cloud storage.
-                </p>
-            </div>
-             <?php else: ?>
-                    <div class="p-5 bg-blue-50 rounded-lg border border-blue-100 flex items-start">
-                        <i class="ph-fill ph-info text-blue-500 text-xl mr-3 mt-0.5"></i>
-                        <div>
-                            <h4 class="text-sm font-bold text-blue-900">Audio Management Locked</h4>
-                            <p class="text-sm text-blue-800 mt-1">Podcast publish status   cannot be edited here. To update the Podcast status , please visit the podcast table.</p>
-                        </div>
-                    </div>
-                <?php endif; ?>
         </div>
+
         <div class="mt-8 pt-6 border-t border-gray-100 flex justify-between" x-show="!isUploading">
             <button type="button" x-show="step > 1" @click="step--" class="px-6 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
                 Back
@@ -347,33 +291,5 @@
     100% { transform: translateX(100%); }
 }
 </style>
-
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
-<style>
-    /* Quick Tailwind overrides for Select2 to match your theme */
-    .select2-container--default .select2-selection--multiple {
-        border-color: #D1D5DB; /* border-gray-300 */
-        border-radius: 0.5rem; /* rounded-lg */
-        min-height: 42px;
-        padding: 2px 4px;
-    }
-    .select2-container--default.select2-container--focus .select2-selection--multiple {
-        border-color: #EAB308; /* focus:border-gold-500 */
-        box-shadow: 0 0 0 1px #EAB308; /* focus:ring-gold-500 */
-    }
-</style>
-
-<script>
-    $(document).ready(function() {
-        $('.select2-multiple').select2({
-            placeholder: "Select co-authors...",
-            allowClear: true,
-            width: '100%'
-        });
-    });
-</script>
 
 <?= $this->endSection() ?>

@@ -471,10 +471,48 @@ private function getWizardData()
     }
 
     // Safely Soft-Deletes the Podcast
+    // public function delete($id)
+    // {
+    //     $this->podcastModel->delete($id);
+    //     return redirect()->to('admin/podcasts')->with('success', 'Podcast deleted successfully.');
+    // }
+    // Safely Archives and Hard-Deletes the Podcast
     public function delete($id)
     {
-        $this->podcastModel->delete($id);
-        return redirect()->to('admin/podcasts')->with('success', 'Podcast deleted successfully.');
+        $db = \Config\Database::connect();
+        
+        // 1. Fetch the existing podcast as an array
+        $podcast = $this->podcastModel->find($id);
+        
+        if (!$podcast) {
+            return redirect()->to('admin/podcasts')->with('error', 'Podcast not found.');
+        }
+
+        // Start the transaction
+        $db->transStart();
+
+        // 2. Stamp the exact deletion time
+        $podcast['deleted_at'] = date('Y-m-d H:i:s');
+
+        // 3. Move the data into the archive table
+        $db->table('deleted_podcasts')->insert($podcast);
+
+        // 4. Hard delete from the main table
+        // (Using Query Builder directly bypasses CI4 soft-delete if it was enabled on the model)
+        $db->table('podcasts')->where('id', $id)->delete();
+
+        // Optional: You could also run a query here to delete/archive comments 
+        // linked to this podcast if you have a comments table.
+
+        // Complete the transaction
+        $db->transComplete();
+
+        // 5. Check if the transfer was successful
+        if ($db->transStatus() === false) {
+            return redirect()->to('admin/podcasts')->with('error', 'A database error occurred while trying to archive the podcast.');
+        }
+
+        return redirect()->to('admin/podcasts')->with('success', 'Podcast archived and deleted successfully.');
     }
 
     public function save_old_beforeHLS_encoding($id = null)
@@ -622,18 +660,19 @@ private function getWizardData()
             'description' => $this->request->getPost('description'),
             'category_id' => $this->request->getPost('category_id'),
             'theme_id'    => $this->request->getPost('theme_id') ?: null,
-            'status'      => $this->request->getPost('status')
         ];
 
         $oldPodcast = null;
         if ($id) {
             $oldPodcast = $this->podcastModel->find($id);
+            $slug = $oldPodcast['slug'];
         } else {
             $slug = $this->generateUniqueSlug($title);
             $podcastData['slug'] = $slug;
             $podcastData['ffmeg_status'] = 'processing';
             $podcastData['created_by'] = session()->get('user_id');
             $podcastData['published_at'] = $this->request->getPost('status') === 'published' ? date('Y-m-d H:i:s') : null;
+            $podcastData['status']      = $this->request->getPost('status');
         }
 
         $cloudflare = new \App\Libraries\CloudflareStorage();
@@ -642,16 +681,32 @@ private function getWizardData()
         // 1. CLOUDFLARE R2: Handle Cover Image (For Both New & Updates)
         // --------------------------------------------------------------------
         $coverFile = $this->request->getFile('cover_image');
-        if ($coverFile && $coverFile->isValid() && !$coverFile->hasMoved()) {
-            $coverUrl = $cloudflare->upload($coverFile, 'podcasts/covers');
+        // if ($coverFile && $coverFile->isValid() && !$coverFile->hasMoved()) {
+        //     $coverUrl = $cloudflare->upload($coverFile, 'podcasts/covers');
+        //     if ($coverUrl) {
+        //         $podcastData['cover_image_url'] = $coverUrl;
+        //         if ($oldPodcast && !empty($oldPodcast['cover_image_url'])) {
+        //             $cloudflare->delete($oldPodcast['cover_image_url']);
+        //         }
+        //     } else {
+        //         $db->transRollback();
+        //         return $this->respondWithError('Failed to upload cover image to Cloudflare.');
+        //     }
+        // }
+        if ($coverFile && $coverFile->isValid()) {
+            
+            $cloudflare = new \App\Libraries\CloudflareStorage();
+            $oldCoverUrl = $oldPodcast['cover_image_url'] ?? null;
+            
+            // 👉 ADJUSTMENT 2: Use the ultimate DRY uploader to automatically compress and replace!
+            $coverUrl = $cloudflare->optimizeAndUpload($coverFile, 'podcasts/covers', $slug, $oldCoverUrl);
+            
             if ($coverUrl) {
                 $podcastData['cover_image_url'] = $coverUrl;
-                if ($oldPodcast && !empty($oldPodcast['cover_image_url'])) {
-                    $cloudflare->delete($oldPodcast['cover_image_url']);
-                }
             } else {
                 $db->transRollback();
-                return $this->respondWithError('Failed to upload cover image to Cloudflare.');
+                // 👉 ADJUSTMENT 3: Return JSON so your JS Wizard catches the error beautifully
+                return $this->response->setJSON(['success' => false, 'message' => 'Failed to optimize and upload cover image....']);
             }
         }
 
@@ -662,7 +717,7 @@ private function getWizardData()
 
             // High Quality MP3 (Required)
             $highFile = $this->request->getFile('media_high');
-   if ($highFile && $highFile->isValid() && !$highFile->hasMoved()) {
+//    if ($highFile && $highFile->isValid() && !$highFile->hasMoved()) {
 
    if ($highFile && $highFile->isValid() && !$highFile->hasMoved()) {
                 $vaultDir = WRITEPATH . 'uploads/vault/';
@@ -691,7 +746,7 @@ private function getWizardData()
         //     $db->transRollback();
         //     return $this->respondWithError('Media Processing Failed: ' . $e->getMessage());
         // }
-    }
+    // }
 
             // Low Quality AAC/MP3 (Optional)
             // $lowFile = $this->request->getFile('media_low');
@@ -1090,7 +1145,7 @@ private function recursiveDelete($dir) {
     }
 
     // Loads the Media Editor View
-    public function media($id)
+    public function media_old($id)
     {
         $podcast = $this->podcastModel->find($id);
         if (!$podcast) {
@@ -1106,7 +1161,7 @@ private function recursiveDelete($dir) {
     }
 
     // Handles the AJAX Audio Upload & Replacement
-    public function updateMedia($id)
+    public function updateMedia_old($id)
     {
         if (!$this->request->isAJAX()) {
             return redirect()->to('admin/podcasts');
@@ -1165,6 +1220,98 @@ private function recursiveDelete($dir) {
         }
 
         session()->setFlashdata('success', 'Audio files successfully updated!');
+        return $this->response->setJSON(['success' => true, 'redirect' => site_url('admin/podcasts')]);
+    }
+
+    public function media($id)
+    {
+        $podcast = $this->podcastModel->find($id);
+        if (!$podcast) {
+            return redirect()->to('admin/podcasts')->with('error', 'Podcast not found.');
+        }
+
+        // We pass the Master MP3 URLs to the view so the HTML5 audio player can stream them
+        $data = [
+            'title'   => 'Manage Audio: ' . $podcast['title'],
+            'podcast' => $podcast,
+            'highUrl' => !empty($podcast['master_high_url']) ? media_url($podcast['master_high_url']) : '',
+            'lowUrl'  => !empty($podcast['master_low_url']) ? media_url($podcast['master_low_url']) : ''
+        ];
+
+        return view('admin/podcasts/media', $data);
+    }
+
+    public function updateMedia($id)
+    {
+        if (!$this->request->isAJAX()) {
+            return $this->response->setStatusCode(403)->setBody('Direct access not allowed');
+        }
+
+        $podcast = $this->podcastModel->find($id);
+        if (!$podcast) {
+            return $this->response->setJSON(['success' => false, 'message' => 'Podcast not found.']);
+        }
+
+        $highFile = $this->request->getFile('media_high');
+        if (!$highFile || !$highFile->isValid() || $highFile->hasMoved()) {
+            return $this->response->setJSON(['success' => false, 'message' => 'A valid High Quality MP3 file is required.']);
+        }
+
+        $db = \Config\Database::connect();
+        $db->transStart();
+
+        $slug = $podcast['slug'];
+
+        // 1. Move the new file to the local Vault (Overwriting the old one)
+        $vaultDir = WRITEPATH . 'uploads/vault/';
+        if (!is_dir($vaultDir)) mkdir($vaultDir, 0777, true);
+        $highFile->move($vaultDir, $slug . '.mp3', true); // 'true' forces overwrite
+
+        // 2. Reset the Podcast Statuses back to square one!
+        // We set ffmeg_status to 'idle' so the cron job knows it needs to process it.
+        $db->table('podcasts')->where('id', $id)->update([
+            'status'       => 'processing',
+            'ffmeg_status' => 'idle',
+            'published_at' => null, // Un-publish it until it passes QA again
+            'review_count' => 0     // Reset approvals
+        ]);
+
+        // 3. Clear old QA Reviews since the audio changed entirely
+        $db->table('podcast_reviews')->where('podcast_id', $id)->delete();
+
+        // 4. Job Throttling: Calculate the next safe start time
+        $lastJob = $db->table('media_queue')
+                      ->whereIn('status', ['pending', 'processing'])
+                      ->orderBy('start_time', 'DESC')
+                      ->get()
+                      ->getRow();
+
+        $startTime = date('Y-m-d H:i:s'); // Default: Start immediately
+
+        if ($lastJob && $lastJob->start_time) {
+            $lastJobTime = strtotime($lastJob->start_time);
+            $currentTime = time();
+            $nextAvailableTime = $lastJobTime + (20 * 60); // 20-minute gap
+            if ($nextAvailableTime > $currentTime) {
+                $startTime = date('Y-m-d H:i:s', $nextAvailableTime);
+            }
+        }
+
+        // 5. Insert the new job into the queue
+        $db->table('media_queue')->insert([
+            'podcast_id' => $id,
+            'slug'       => $slug,
+            'status'     => 'pending',
+            'start_time' => $startTime
+        ]);
+
+        $db->transComplete();
+
+        if ($db->transStatus() === false) {
+            return $this->response->setJSON(['success' => false, 'message' => 'Database error during update.']);
+        }
+
+        session()->setFlashdata('success', 'New audio queued! The podcast has been reverted to Processing status.');
         return $this->response->setJSON(['success' => true, 'redirect' => site_url('admin/podcasts')]);
     }
 

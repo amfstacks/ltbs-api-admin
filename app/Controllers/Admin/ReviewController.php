@@ -129,7 +129,10 @@ class ReviewController extends BaseController
 //         $lowUrl = !empty($podcast['master_low_url']) 
 //             ? $r2PublicUrl . '/' . $podcast['master_low_url']
 //             : null;
-
+$mentionableUsers = [];
+        foreach($reviews as $r) {
+            $mentionableUsers[] = ['id' => $r['user_id'], 'name' => $r['first_name'] . ' ' . $r['last_name']];
+        }
         $data = [
             'title'     => 'Review Room',
             'podcast'   => $podcast,
@@ -138,6 +141,7 @@ class ReviewController extends BaseController
             'myStatus'  => $myReviewStatus,
             'highUrl'   => $highUrl,
             'lowUrl'    => $lowUrl,
+            'mentionableUsers' => json_encode($mentionableUsers)
         ];
 
         return view('admin/reviews/process', $data);
@@ -182,4 +186,208 @@ class ReviewController extends BaseController
             log_message('error', '[R2 URL Signing Failed] ' . $e->getMessage());
             return null;
         }}
+
+
+        // =======================================================
+    // AJAX ENDPOINTS
+    // =======================================================
+
+    public function getNotes($podcastId)
+    {
+        $noteModel = new \App\Models\PodcastReviewNoteModel();
+        $notes = $noteModel->select('podcast_review_notes.*, users.first_name, users.role')
+            ->join('users', 'users.id = podcast_review_notes.user_id')
+            ->where('podcast_id', $podcastId)
+            ->orderBy('timestamp', 'ASC') // Order by audio time!
+            ->findAll();
+            
+        return $this->response->setJSON($notes);
+    }
+
+    public function addNote($podcastId)
+    {
+        $noteModel = new \App\Models\PodcastReviewNoteModel();
+        $json = $this->request->getJSON();
+        
+        $noteModel->insert([
+            'podcast_id' => $podcastId,
+            'user_id'    => session()->get('user_id'),
+            'timestamp'  => (int)$json->timestamp,
+            'note'       => esc($json->note)
+        ]);
+
+        return $this->response->setJSON(['status' => 'success']);
+    }
+
+    public function getChats_old($podcastId)
+    {
+        // Only Reviewers and Admins can fetch chats
+        if (!in_array(session()->get('role'), ['reviewer', 'superadmin'])) {
+            return $this->response->setStatusCode(403);
+        }
+
+        $chatModel = new \App\Models\PodcastReviewChatModel();
+        $chats = $chatModel->select('podcast_review_chats.*, users.first_name, users.last_name')
+            ->join('users', 'users.id = podcast_review_chats.user_id')
+            ->where('podcast_id', $podcastId)
+            ->orderBy('created_at', 'ASC')
+            ->findAll();
+
+        return $this->response->setJSON(['chats' => $chats, 'me' => session()->get('user_id')]);
+    }
+
+    public function addChat_old($podcastId)
+    {
+        if (!in_array(session()->get('role'), ['reviewer', 'superadmin'])) return $this->response->setStatusCode(403);
+
+        $json = $this->request->getJSON();
+        (new \App\Models\PodcastReviewChatModel())->insert([
+            'podcast_id' => $podcastId,
+            'user_id'    => session()->get('user_id'),
+            'message'    => esc($json->message)
+        ]);
+
+        return $this->response->setJSON(['status' => 'success']);
+    }
+    public function getChats($podcastId)
+    {
+        if (!in_array(session()->get('role'), ['reviewer', 'superadmin'])) return $this->response->setStatusCode(403);
+
+        $db = \Config\Database::connect();
+        
+        // We use a self-join to grab the parent message snippet if it's a reply!
+        $chats = $db->table('podcast_review_chats c1')
+            ->select('c1.*, users.first_name, users.last_name, c2.message as reply_to_message, u2.first_name as reply_to_name')
+            ->join('users', 'users.id = c1.user_id')
+            ->join('podcast_review_chats c2', 'c2.id = c1.reply_to_id', 'left')
+            ->join('users u2', 'u2.id = c2.user_id', 'left')
+            ->where('c1.podcast_id', $podcastId)
+            ->orderBy('c1.created_at', 'ASC')
+            ->get()->getResultArray();
+
+        return $this->response->setJSON(['chats' => $chats, 'me' => session()->get('user_id')]);
+    }
+
+    public function addChat($podcastId)
+    {
+        if (!in_array(session()->get('role'), ['reviewer', 'superadmin'])) return $this->response->setStatusCode(403);
+
+        $json = $this->request->getJSON();
+        (new \App\Models\PodcastReviewChatModel())->insert([
+            'podcast_id'  => $podcastId,
+            'user_id'     => session()->get('user_id'),
+            'reply_to_id' => !empty($json->reply_to_id) ? $json->reply_to_id : null,
+            'message'     => esc($json->message)
+        ]);
+
+        return $this->response->setJSON(['status' => 'success']);
+    }
+
+    public function submitDecision_old($podcastId)
+    {
+        if (!in_array(session()->get('role'), ['reviewer', 'superadmin'])) return $this->response->setStatusCode(403);
+
+        $json = $this->request->getJSON();
+        $decision = $json->decision; // 'approved', 'changes_requested', 'rejected'
+        $userId = session()->get('user_id');
+
+        $reviewModel = new \App\Models\PodcastReviewModel();
+        $podcastModel = new \App\Models\PodcastModel();
+
+        // 1. Upsert the Review Ledger
+        $existing = $reviewModel->where(['podcast_id' => $podcastId, 'user_id' => $userId])->first();
+        if ($existing) {
+            $reviewModel->update($existing['id'], ['status' => $decision]);
+        } else {
+            $reviewModel->insert(['podcast_id' => $podcastId, 'user_id' => $userId, 'status' => $decision]);
+        }
+
+        // 2. Recalculate global approvals for this podcast
+        $totalApprovals = $reviewModel->where(['podcast_id' => $podcastId, 'status' => 'approved'])->countAllResults();
+        
+        // 3. Update the podcast table cache
+        $updateData = ['review_count' => $totalApprovals];
+        
+        // AUTO-PUBLISH LOGIC: If it hits 3 approvals, automatically push it live!
+        if ($totalApprovals >= 3) {
+            $updateData['status'] = 'published';
+            $updateData['published_at'] = date('Y-m-d H:i:s');
+        }
+
+        $podcastModel->update($podcastId, $updateData);
+
+        return $this->response->setJSON([
+            'status' => 'success',
+            'total_approvals' => $totalApprovals,
+            'is_published' => ($totalApprovals >= 3)
+        ]);
+    }
+    public function submitDecision($podcastId)
+    {
+        if (!in_array(session()->get('role'), ['reviewer', 'superadmin'])) return $this->response->setStatusCode(403);
+
+        $json = $this->request->getJSON();
+        $decision = $json->decision; // 'approved', 'changes_requested', 'rejected'
+        // 👉 NEW: Grab the notes from the payload
+        $notes = isset($json->notes) ? esc($json->notes) : null; 
+        
+        $userId = session()->get('user_id');
+
+        $reviewModel = new \App\Models\PodcastReviewModel();
+        $podcastModel = new \App\Models\PodcastModel();
+
+        // 1. Upsert the Review Ledger (NOW WITH NOTES)
+        $existing = $reviewModel->where(['podcast_id' => $podcastId, 'user_id' => $userId])->first();
+        if ($existing) {
+            $reviewModel->update($existing['id'], ['status' => $decision, 'notes' => $notes]);
+        } else {
+            $reviewModel->insert(['podcast_id' => $podcastId, 'user_id' => $userId, 'status' => $decision, 'notes' => $notes]);
+        }
+
+        // 2. Recalculate global approvals for this podcast
+        $totalApprovals = $reviewModel->where(['podcast_id' => $podcastId, 'status' => 'approved'])->countAllResults();
+        
+        // 3. Update the podcast table cache
+        $updateData = ['review_count' => $totalApprovals];
+        
+        // AUTO-PUBLISH LOGIC
+        if ($totalApprovals >= 3) {
+            $updateData['status'] = 'published';
+            $updateData['published_at'] = date('Y-m-d H:i:s');
+        }
+
+        $podcastModel->update($podcastId, $updateData);
+
+        return $this->response->setJSON([
+            'status' => 'success',
+            'total_approvals' => $totalApprovals,
+            'is_published' => ($totalApprovals >= 3)
+        ]);
+    }
+    public function history()
+    {
+        if (!in_array(session()->get('role'), ['reviewer', 'superadmin'])) return redirect()->to('admin/dashboard');
+
+        $userId = (int) session()->get('user_id');
+        $db = \Config\Database::connect();
+
+        // Fetch all podcasts this specific user has reviewed
+        $history = $db->table('podcast_reviews')
+            ->select('podcast_reviews.status as my_decision, podcast_reviews.updated_at as decision_date, podcasts.title, podcasts.status as global_status')
+            ->join('podcasts', 'podcasts.id = podcast_reviews.podcast_id')
+            ->where('podcast_reviews.user_id', $userId)
+            ->where('podcast_reviews.status !=', 'pending')
+            ->orderBy('podcast_reviews.updated_at', 'DESC')
+            ->get()->getResultArray();
+
+        return view('admin/reviews/history', ['title' => 'Review History', 'history' => $history]);
+    }
+
+    public function guidelines()
+    {
+        if (!in_array(session()->get('role'), ['reviewer', 'superadmin'])) return redirect()->to('admin/dashboard');
+        
+        // This is a static reference page, no DB call needed!
+        return view('admin/reviews/guidelines', ['title' => 'QA Guidelines']);
+    }
 }

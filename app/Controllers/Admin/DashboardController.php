@@ -8,9 +8,14 @@ class DashboardController extends BaseController
 {
     public function index()
     {
+
         $db = \Config\Database::connect();
         $userId = session()->get('user_id');
         $role = session()->get('role');
+         if ($role === 'reviewer') {
+                return redirect()->to('admin/reviews')->with('success', 'Welcome back, ');
+
+         }
 
         // 1. Build the base query for podcasts
         $builder = $db->table('podcasts')

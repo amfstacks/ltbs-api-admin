@@ -71,7 +71,7 @@ class ThemeController extends BaseController
     }
 
 
-    public function save($id = null)
+    public function save_old2($id = null)
     {
         $name = $this->request->getPost('name');
         
@@ -109,6 +109,59 @@ class ThemeController extends BaseController
 
         if ($id) {
 
+            $this->themeModel->update($id, $saveData);
+            $message = 'Theme updated successfully.';
+        } else {
+            $this->themeModel->insert($saveData);
+            $message = 'Theme created successfully.';
+        }
+
+        if ($this->themeModel->errors()) {
+            return redirect()->back()->withInput()->with('error', implode(' ', $this->themeModel->errors()));
+        }
+
+        return redirect()->to('admin/themes')->with('success', $message);
+    }
+    public function save($id = null)
+    {
+        $name = $this->request->getPost('name');
+        
+        $saveData = [
+            'name' => $name,
+        ];
+
+        // Fetch the OLD theme data if updating, to prevent orphan files
+        $oldTheme = $id ? $this->themeModel->find($id) : null;
+
+        // 👉 Safely determine the slug for both Create and Update operations
+        if (!$id) {
+            $slug = strtolower(url_title($name));
+            $saveData['slug'] = $slug;
+        } else {
+            $slug = $oldTheme['slug'] ?? strtolower(url_title($name));
+        }
+
+        // --------------------------------------------------------------------
+        // CLOUDFLARE R2: Handle Icon Upload & Deletion
+        // --------------------------------------------------------------------
+       $file = $this->request->getFile('icon');
+        
+        // Only run if they actually uploaded a file
+        if ($file && $file->isValid()) {
+            $cloudflare = new \App\Libraries\CloudflareStorage();
+            
+            // 👉 THE DRY CALL
+            $oldUrl = $oldCategory['icon_url'] ?? null; // Use $oldTheme for ThemeController
+            $iconUrl = $cloudflare->optimizeAndUpload($file, 'categories/icons', $slug, $oldUrl);
+
+            if ($iconUrl) {
+                $saveData['icon_url'] = $iconUrl;
+            } else {
+                return redirect()->back()->withInput()->with('error', 'Failed to process and upload the image.');
+            }
+        }
+
+        if ($id) {
             $this->themeModel->update($id, $saveData);
             $message = 'Theme updated successfully.';
         } else {

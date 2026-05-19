@@ -31,7 +31,7 @@ class AdminFilter implements FilterInterface
         }
 
         // Pro-tip: If they are logged in but just an 'app_user', kick them out too!
-        if (!in_array(session()->get('role'), ['superadmin', 'author'])) {
+        if (!in_array(session()->get('role'), ['superadmin', 'author', 'reviewer'])) {
             session()->destroy();
             return redirect()->to('admin/login')->with('error', 'Unauthorized access.');
         }
