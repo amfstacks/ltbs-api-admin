@@ -23,15 +23,15 @@ class DiscoveryController extends BaseApiController
     {
         // 1. Fetch Categories (Limit to 8 for the home grid)
         $categoryModel = new CategoryModel();
-        $categories = $categoryModel->select('id, name as title, slug, icon_url')
-                                    ->orderBy('name', 'ASC')
-                                    ->findAll(8);
+$categories = $categoryModel->select('id, name as title, slug, icon_url')
+                            ->orderBy('id', 'RANDOM')
+                            ->findAll(6);
 
-        // 2. Fetch Themes (Limit to 8)
-        $themeModel = new ThemeModel();
-        $themes = $themeModel->select('id, name as title, slug, icon_url')
-                             ->orderBy('name', 'ASC')
-                             ->findAll(8);
+// 2. Fetch Themes (Limit to 6)
+$themeModel = new ThemeModel();
+$themes = $themeModel->select('id, name as title, slug, icon_url')
+                     ->orderBy('id', 'RANDOM')
+                     ->findAll(6);
 
         // 3. Fetch Featured Podcast (The absolute latest published teaching)
         $featured = $this->getFormattedPodcasts(1, 'created_at', 'DESC');
@@ -103,5 +103,111 @@ class DiscoveryController extends BaseApiController
 
         // 2. Pass it through the Master Formatter so it matches the Flutter App perfectly!
         return $this->formatPodcastsWithAuthors($rawPodcasts);
+    }
+    /**
+     * GET /api/v1/discovery/categories
+     * Fetches paginated categories with their podcast counts
+     */
+    public function categories()
+    {
+        $categoryModel = new CategoryModel();
+        
+        // Use 12 per page because it divides perfectly for 2, 3, or 4 column grids!
+        $limit = $this->request->getGet('limit') ?? 12; 
+
+        $categories = $categoryModel->select('categories.id, categories.name as title, categories.slug, categories.icon_url, COUNT(podcasts.id) as podcastCount')
+            ->join('podcasts', 'podcasts.category_id = categories.id AND podcasts.status = "published"', 'left')
+            ->groupBy('categories.id')
+            ->orderBy('categories.name', 'ASC')
+            ->paginate($limit);
+
+        $pager = $categoryModel->pager;
+
+        $payload = [
+            'categories' => $categories,
+            'pagination' => [
+                'current_page' => $pager->getCurrentPage(),
+                'total_pages'  => $pager->getPageCount(),
+                'total_items'  => $pager->getTotal(),
+                'has_more'     => $pager->getCurrentPage() < $pager->getPageCount()
+            ]
+        ];
+
+        return $this->sendSuccess($payload, 'Categories retrieved successfully');
+    }
+
+    /**
+     * GET /api/v1/discovery/themes
+     * Fetches paginated themes with their podcast counts
+     */
+    public function themes()
+    {
+        $themeModel = new ThemeModel();
+        
+        $limit = $this->request->getGet('limit') ?? 12;
+
+        $themes = $themeModel->select('themes.id, themes.name as title, themes.slug, themes.icon_url, COUNT(podcasts.id) as podcastCount')
+            ->join('podcasts', 'podcasts.theme_id = themes.id AND podcasts.status = "published"', 'left')
+            ->groupBy('themes.id')
+            ->orderBy('themes.name', 'ASC')
+            ->paginate($limit);
+
+        $pager = $themeModel->pager;
+
+        $payload = [
+            'themes' => $themes,
+            'pagination' => [
+                'current_page' => $pager->getCurrentPage(),
+                'total_pages'  => $pager->getPageCount(),
+                'total_items'  => $pager->getTotal(),
+                'has_more'     => $pager->getCurrentPage() < $pager->getPageCount()
+            ]
+        ];
+
+        return $this->sendSuccess($payload, 'Themes retrieved successfully');
+    }
+
+    /**
+     * POST /api/v1/discovery/check-version
+     * Intercepts Android platform binaries to enforce kill-switch expirations
+     */
+    /**
+     * POST /api/v1/discovery/check-version
+     * Intercepts Android platform binaries to enforce kill-switch expirations
+     */
+    public function checkVersion()
+    {
+        // 👉 THE FIX: Use getVar() to successfully read the JSON payload from Flutter
+        $vVersion = $this->request->getVar('v_version');
+        
+        if (empty($vVersion)) {
+            return $this->sendError('App version identifier parameter is required.', 400);
+        }
+
+        $db = \Config\Database::connect();
+        $versionRow = $db->table('app_versions')
+                         ->where('v_version', $vVersion)
+                         ->get()
+                         ->getRowArray();
+
+        // Safe fallback scenario: if you haven't explicitly registered this string tag in DB, let it pass
+        if (!$versionRow) {
+            return $this->sendSuccess(['is_blocked' => false], 'Version tracking trace omitted.');
+        }
+
+        $now = new \DateTime();
+        $expiry = new \DateTime($versionRow['expires_at']);
+
+        // Check if the exact server timestamp exceeds the hard limit configuration
+        $isBlocked = ($now > $expiry);
+
+        $payload = [
+            'is_blocked'     => $isBlocked,
+            'expiry_date'    => $versionRow['expires_at'],
+            'update_url'     => $versionRow['update_url'],
+            'custom_message' => $versionRow['custom_message'] ?? 'This version of the application has expired. An update is required.'
+        ];
+
+        return $this->sendSuccess($payload, 'Version health metrics checked successfully.');
     }
 }

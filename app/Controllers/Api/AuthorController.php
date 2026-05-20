@@ -30,17 +30,22 @@ class AuthorController extends BaseApiController
                              ->findAll($limit, $offset);
 
         // 4. Format securely for Flutter (Don't send password hashes!)
-        $formattedAuthors = array_map(function($author) {
-            return [
-                'id'       => (int) $author['id'],
-                // Combine first and last name
-                'name'     => trim(($author['first_name'] ?? '') . ' ' . ($author['last_name'] ?? '')),
-                'bio'      => $author['bio'] ?? '',
-                // Fallback to avatar if profile image is null
-                'imageUrl' => $author['profile_image_url'] ?? $author['avatar_url'] ?? null, 
-                'churchId' => isset($author['church_id']) ? (int) $author['church_id'] : null,
-            ];
-        }, $authors);
+       $formattedAuthors = array_map(function($author) {
+    return [
+        'user' => [
+            'id'                => $author['id'],
+            'first_name'        => $author['first_name'],
+            'last_name'         => $author['last_name'] ?? '',
+            'bio'               => $author['bio'],
+            'profile_image_url' => media_url($author['profile_image_url']),
+            'churchId'          => $author['churchId'] ?? null,
+        ],
+        'stats' => [
+            'total_listens'       => $author['total_listens'] ?? 0,
+            'forum_contributions' => $author['forum_contributions'] ?? 0,
+        ]
+    ];
+}, $authors);
 
         return $this->sendSuccess([
             'authors' => $formattedAuthors,

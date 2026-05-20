@@ -1234,8 +1234,8 @@ private function recursiveDelete($dir) {
         $data = [
             'title'   => 'Manage Audio: ' . $podcast['title'],
             'podcast' => $podcast,
-            'highUrl' => !empty($podcast['master_high_url']) ? media_url($podcast['master_high_url']) : '',
-            'lowUrl'  => !empty($podcast['master_low_url']) ? media_url($podcast['master_low_url']) : ''
+            'highUrl' => !empty($podcast['master_high_url']) ? secure_audio_url($podcast['master_high_url']) : '',
+            'lowUrl'  => !empty($podcast['master_low_url']) ? secure_audio_url($podcast['master_low_url']) : ''
         ];
 
         return view('admin/podcasts/media', $data);
@@ -1267,17 +1267,52 @@ private function recursiveDelete($dir) {
         if (!is_dir($vaultDir)) mkdir($vaultDir, 0777, true);
         $highFile->move($vaultDir, $slug . '.mp3', true); // 'true' forces overwrite
 
+try {
+            $cloudflare = new \App\Libraries\CloudflareStorage();
+            
+            // Delete the raw MP3 files using the exact paths from the database
+            if (!empty($podcast['master_high_url'])) {
+                $cloudflare->delete($podcast['master_high_url']);
+            }
+            if (!empty($podcast['master_low_url'])) {
+                $cloudflare->delete($podcast['master_low_url']);
+            }
+            
+            // Delete the entire HLS folders using the structure from your Cron Job
+            // (Assuming you have this deleteFolder method in your CloudflareStorage library)
+            if (!empty($podcast['media_high_url']) || !empty($podcast['media_low_url'])) {
+                $cloudflare->deleteFolder("podcasts/hls/high/{$slug}/");
+                $cloudflare->deleteFolder("podcasts/hls/low/{$slug}/");
+            }
+        } catch (\Exception $e) {
+            // We wrap this in a try/catch so that if Cloudflare has a network hiccup, 
+            // it logs the error but DOES NOT crash the user's upload process!
+            log_message('error', "Failed to delete old R2 media for {$slug}: " . $e->getMessage());
+        }
+
+
         // 2. Reset the Podcast Statuses back to square one!
         // We set ffmeg_status to 'idle' so the cron job knows it needs to process it.
         $db->table('podcasts')->where('id', $id)->update([
             'status'       => 'processing',
             'ffmeg_status' => 'idle',
             'published_at' => null, // Un-publish it until it passes QA again
-            'review_count' => 0     // Reset approvals
+            'review_count' => 0  ,
+            'master_high_url' => null, // Wipe the old Master HQ
+            'master_low_url'  => null, // Wipe the old Master LQ
+            'media_high_url'  => null, // Wipe the old HLS HQ
+            'media_low_url'   => null   // Reset approvals
         ]);
 
         // 3. Clear old QA Reviews since the audio changed entirely
         $db->table('podcast_reviews')->where('podcast_id', $id)->delete();
+        $db->table('media_queue')
+           ->where('podcast_id', $id)
+           ->whereIn('status', ['pending', 'processing', 'failed'])
+           ->update([
+               'status'    => 'cancelled',
+               'error_log' => 'Cancelled: The user uploaded a replacement audio file.'
+           ]);
 
         // 4. Job Throttling: Calculate the next safe start time
         $lastJob = $db->table('media_queue')

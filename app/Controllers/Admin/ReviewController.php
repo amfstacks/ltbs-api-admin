@@ -56,6 +56,7 @@ class ReviewController extends BaseController
             // Left join on reviews so we know if the logged-in user has already acted on it
             ->join('podcast_reviews', 'podcast_reviews.podcast_id = podcasts.id AND podcast_reviews.user_id = ' . $userId, 'left')
             ->where('podcasts.status', 'in_review')
+            ->where('podcasts.ffmeg_status', 'completed')
             ->orderBy('podcasts.created_at', 'ASC') // Oldest first (FIFO queue system!)
             ->findAll();
 

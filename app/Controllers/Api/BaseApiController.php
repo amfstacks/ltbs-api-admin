@@ -199,6 +199,7 @@ protected function getUserId()
                                 ? $p['media_low_url'] 
                                 : ($p['media_high_url'] ?? null);
                 $finalAudioUrl = getenv('R2_PUBLIC_URL') . '/' . $rawAudioUrl;
+                // $finalAudioUrl = $this->getSecureAudioUrl($rawAudioUrl);
             } else {
                 // User requested standard MP3
                 $rawAudioUrl = ($isDataSaver && !empty($p['master_low_url'])) 
@@ -232,7 +233,7 @@ protected function getUserId()
                 'audio_url'       => $finalAudioUrl, // Dynamically assigned
                 'download_url'    => $downloadUrl, // Dynamically assigned
                 'is_hls'          => $usehls,
-                'cover_url'       => $p['cover_image_url'] ?? null,
+                'cover_url'       => media_url($p['cover_image_url']) ?? null,
                 'listen_count'    => (int)($p['play_count'] ?? 0),
                 'like_count'      => (int)($p['like_count'] ?? 0),
                 'bookmark_count'  => (int)($p['bookmark_count'] ?? 0),

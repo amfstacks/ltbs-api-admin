@@ -26,7 +26,7 @@
             <div class="flex flex-col md:flex-row gap-6">
                 <div class="w-32 h-32 flex-shrink-0 bg-gray-100 rounded-lg border border-gray-200 overflow-hidden flex items-center justify-center">
                     <?php if($podcast['cover_image_url']): ?>
-                        <img src="<?= base_url('uploads/covers/' . $podcast['cover_image_url']) ?>" class="w-full h-full object-cover">
+                        <img src="<?= media_url($podcast['cover_image_url']) ?>" class="w-full h-full object-cover">
                     <?php else: ?>
                         <i class="ph-fill ph-microphone-stage text-4xl text-gray-300"></i>
                     <?php endif; ?>

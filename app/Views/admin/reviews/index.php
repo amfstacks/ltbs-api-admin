@@ -71,7 +71,7 @@
                             <div class="flex items-center">
                                 <div class="h-10 w-10 flex-shrink-0 rounded bg-navy-100 flex items-center justify-center text-navy-900 overflow-hidden">
                                     <?php if($podcast['cover_image_url']): ?>
-                                        <img src="<?= base_url('uploads/covers/' . $podcast['cover_image_url']) ?>" class="w-full h-full object-cover">
+                                        <img src="<?= media_url($podcast['cover_image_url']) ?>" class="w-full h-full object-cover">
                                     <?php else: ?>
                                         <i class="ph-fill ph-microphone-stage text-xl"></i>
                                     <?php endif; ?>

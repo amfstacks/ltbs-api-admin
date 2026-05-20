@@ -95,6 +95,12 @@ $routes->group('admin', function($routes) {
         $routes->get('moderation/flagged', 'Admin\ModerationController::index');
         $routes->post('moderation/resolve/(:num)', 'Admin\ModerationController::resolve/$1');
 
+
+        $routes->get('profile', 'Admin\UserController::profile');
+        $routes->post('profile/update', 'Admin\UserController::updateProfile');
+        $routes->get('change-password', 'Admin\UserController::changePassword');
+        $routes->post('change-password/update', 'Admin\UserController::updatePassword');
+
     });
 
     

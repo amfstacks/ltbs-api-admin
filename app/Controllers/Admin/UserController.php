@@ -106,4 +106,116 @@ class UserController extends BaseController
 
         return redirect()->to('admin/users')->with('success', $msg);
     }
+
+    // =========================================================================
+    // USER PROFILE MANAGEMENT
+    // =========================================================================
+
+    public function profile()
+    {
+        $userId = session()->get('user_id');
+        
+        $data = [
+            'title' => 'My Profile',
+            'user'  => $this->userModel->find($userId)
+        ];
+        
+        return view('admin/users/profile', $data);
+    }
+
+    public function updateProfile()
+    {
+        $userId = session()->get('user_id');
+        $user = $this->userModel->find($userId);
+
+        if (!$user) {
+            return redirect()->to('admin/dashboard')->with('error', 'User not found.');
+        }
+
+        $saveData = [
+            'first_name' => $this->request->getPost('first_name'),
+            'last_name'  => $this->request->getPost('last_name'),
+            'bio'        => $this->request->getPost('bio'), // WYSIWYG HTML content
+        ];
+
+        // --------------------------------------------------------------------
+        // CLOUDFLARE R2: Handle Profile Picture using our DRY WebP Optimizer
+        // --------------------------------------------------------------------
+        $file = $this->request->getFile('profile_image');
+        if ($file && $file->isValid()) {
+            
+            $cloudflare = new \App\Libraries\CloudflareStorage();
+            
+            // Generate a safe, unique slug for the user's image
+            $slug = 'user_' . $userId . '_' . time(); 
+            $oldUrl = $user['profile_image_url'] ?? null;
+            
+            $imageUrl = $cloudflare->optimizeAndUpload($file, 'users/profiles', $slug, $oldUrl);
+            
+            if ($imageUrl) {
+                $saveData['profile_image_url'] = $imageUrl;
+                
+                // 👉 CRITICAL: Update the session so the top navigation bar avatar changes instantly!
+                session()->set('profile_image_url', $imageUrl); 
+            } else {
+                return redirect()->back()->withInput()->with('error', 'Failed to optimize and upload profile picture.');
+            }
+        }
+
+        // Update the database
+        $this->userModel->update($userId, $saveData);
+        
+        // Update session names in case they fixed a typo in their name
+        session()->set('first_name', $saveData['first_name']);
+        session()->set('last_name', $saveData['last_name']);
+
+        return redirect()->to('admin/profile')->with('success', 'Profile updated successfully.');
+    }
+
+    // =========================================================================
+    // PASSWORD MANAGEMENT
+    // =========================================================================
+
+    public function changePassword()
+    {
+        $data = ['title' => 'Change Password'];
+        return view('admin/users/change_password', $data);
+    }
+
+    public function updatePassword()
+    {
+        $userId = session()->get('user_id');
+        $user = $this->userModel->find($userId);
+
+        if (!$user) {
+            return redirect()->to('admin/dashboard')->with('error', 'User not found.');
+        }
+
+        $oldPassword     = $this->request->getPost('old_password');
+        $newPassword     = $this->request->getPost('new_password');
+        $confirmPassword = $this->request->getPost('confirm_password');
+
+        // 1. Verify Old Password
+        if (!password_verify($oldPassword, $user['password_hash'])) {
+            return redirect()->back()->with('error', 'Your current password is incorrect.');
+        }
+
+        // 2. Validate New Password Length
+        if (strlen($newPassword) < 8) {
+            return redirect()->back()->with('error', 'Your new password must be at least 8 characters long.');
+        }
+
+        // 3. Confirm Passwords Match
+        if ($newPassword !== $confirmPassword) {
+            return redirect()->back()->with('error', 'Your new passwords do not match.');
+        }
+
+        // 4. Hash and Save
+        $this->userModel->update($userId, [
+            'password_hash' => password_hash($newPassword, PASSWORD_DEFAULT, ['cost' => 12])
+        ]);
+
+        return redirect()->to('admin/change-password')->with('success', 'Your password has been securely updated!');
+    }
+    
 }

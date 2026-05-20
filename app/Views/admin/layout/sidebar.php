@@ -87,6 +87,24 @@
                 Global Settings
             </a>
         <?php endif; ?>
+        <div class="pt-4 pb-1">
+            <p class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">My Account</p>
+        </div>
+
+        <a href="<?= site_url('admin/profile') ?>" class="flex items-center px-3 py-2.5 rounded-lg transition-colors <?= url_is('admin/profile') ? 'bg-gold-500 text-navy-900 font-bold shadow-md' : 'hover:bg-navy-800 hover:text-white' ?>">
+            <i class="ph ph-user text-xl mr-3 <?= url_is('admin/profile') ? 'text-navy-900' : 'text-gray-400' ?>"></i>
+            Profile & Bio
+        </a>
+
+        <a href="<?= site_url('admin/change-password') ?>" class="flex items-center px-3 py-2.5 rounded-lg transition-colors <?= url_is('admin/change-password') ? 'bg-gold-500 text-navy-900 font-bold shadow-md' : 'hover:bg-navy-800 hover:text-white' ?>">
+            <i class="ph ph-lock-key text-xl mr-3 <?= url_is('admin/change-password') ? 'text-navy-900' : 'text-gray-400' ?>"></i>
+            Change Password
+        </a>
+        
+        <a href="<?= site_url('auth/logout') ?>" class="flex items-center px-3 py-2.5 rounded-lg transition-colors hover:bg-red-900 hover:text-red-100 mt-2">
+            <i class="ph ph-sign-out text-xl mr-3 text-red-400"></i>
+            Sign Out
+        </a>
 
     </nav>
 
