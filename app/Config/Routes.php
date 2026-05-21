@@ -5,8 +5,8 @@ use CodeIgniter\Router\RouteCollection;
 /**
  * @var RouteCollection $routes
  */
-$routes->options('(:any)', 'Home::index');
-$routes->get('/', 'Home::index');
+// $routes->options('(:any)', 'Home::index');
+// $routes->get('/', 'Home::index');
 
 // --- ADMIN PANEL ROUTES ---
 $routes->group('admin', function($routes) {
