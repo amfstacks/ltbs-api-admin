@@ -32,7 +32,7 @@ class Database extends Config
         // 'database'     => '',
         'username'     => 'pcrin_master_db_user',
         'password'     => '#uAct6q]tymC4@V',
-        'database'     => 'pcrin_master_db',
+        'database'     => 'letthebibelipeak',
         'DBDriver'     => 'MySQLi',
         'DBPrefix'     => '',
         'pConnect'     => false,
