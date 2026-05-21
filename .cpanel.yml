@@ -1,6 +1,4 @@
 ---
 deployment:
   tasks:
-    # Notice the new /backend-assets/ at the end!
-    - export DEPLOYPATH=/home/amfstac1/ltbspeak.com/backend-assets/
-    - /usr/bin/rsync -av --exclude='index.php' --exclude='.htaccess' public/ $DEPLOYPATH
+    - /usr/bin/rsync -av --exclude='index.php' --exclude='.htaccess' public/ /home/amfstac1/ltbspeak.com/backend-assets/
