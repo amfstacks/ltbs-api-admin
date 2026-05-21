@@ -129,6 +129,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api'], function ($rout
     $routes->get('discovery/home', 'DiscoveryController::home');
     $routes->get('categories', 'DiscoveryController::categories');
     $routes->get('themes', 'DiscoveryController::themes');
+    $routes->post('discovery/check-version', 'DiscoveryController::checkVersion');
     $routes->get('authors', 'AuthorController::index');
     
     // Podcasts & Media
