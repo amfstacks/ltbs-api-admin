@@ -651,6 +651,27 @@ private function getWizardData()
     
     public function save($id = null)
     {
+
+    if ($id && $this->request->getPost('action') === 'upload_only_cover') {
+            $coverFile = $this->request->getFile('cover_image');
+            
+            if ($coverFile && $coverFile->isValid()) {
+                $podcast = $this->podcastModel->find($id);
+                
+                if ($podcast) {
+                    $cloudflare = new \App\Libraries\CloudflareStorage();
+                    $coverUrl = $cloudflare->optimizeAndUpload($coverFile, 'podcasts/covers', $podcast['slug'], $podcast['cover_image_url']);
+                    
+                    if ($coverUrl) {
+                        // Update ONLY the cover image URL. No transactions needed!
+                        $this->podcastModel->update($id, ['cover_image_url' => $coverUrl]);
+                    }
+                }
+            }
+            
+            // Exit immediately and return success to the frontend
+            return $this->response->setJSON(['success' => true, 'redirect' => site_url('admin/podcasts')]);
+        }
         $db = \Config\Database::connect();
         $db->transStart(); 
 

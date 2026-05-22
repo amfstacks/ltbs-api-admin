@@ -51,7 +51,7 @@
         }
     },
 
-    // Robust AJAX Submitter
+    
    // Robust AJAX Submitter with Orchestration
     submitForm(e) {
         this.errorMessage = '';
@@ -86,19 +86,17 @@
                 
                 if (xhr.status >= 200 && xhr.status < 300 && response.success) {
                     
-                    // 👉 THE CHAINED REQUEST: Send the cover image to the UPDATE endpoint
+                    // 👉 THE CHAINED REQUEST: Send ONLY the cover image!
                     if (!this.isUpdate && coverFile && coverFile.size > 0) {
                         this.uploadStatusText = 'Audio secured! Uploading Cover Image...';
                         this.uploadProgress = 0; // Reset progress bar
 
+                        // Create a brand new, clean FormData object
                         let coverData = new FormData();
                         
-                        // Pass title and category to satisfy backend validation
-                        coverData.append('title', this.title);
-                        coverData.append('category_id', this.categoryId);
+                        // Append ONLY the 3 required pieces of data
                         coverData.append('cover_image', coverFile);
-                        
-                        // Pass the new CSRF token so CodeIgniter doesn't block us
+                        coverData.append('action', 'upload_only_cover'); // The trigger!
                         coverData.append('<?= csrf_token() ?>', response.new_csrf);
 
                         let xhrCover = new XMLHttpRequest();
