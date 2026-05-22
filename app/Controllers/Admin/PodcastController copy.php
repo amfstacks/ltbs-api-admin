@@ -648,144 +648,7 @@ private function getWizardData()
 
         return $slug;
     }
-    
-    public function save($id = null)
-    {
-        $db = \Config\Database::connect();
-        $db->transStart(); 
-
-        $title = trim((string) $this->request->getPost('title'));
-
-        // Validate immediately
-        if ($title === '') {
-            if ($this->request->isAJAX()) {
-                return $this->response->setJSON(['success' => false, 'message' => 'The podcast title is strictly required.']);
-            }
-            return redirect()->back()->withInput()->with('error', 'The podcast title is strictly required.');
-        }
-        
-        $slug = '';
-        $podcastData = [
-            'title'       => $title,
-            'description' => $this->request->getPost('description'),
-            'category_id' => $this->request->getPost('category_id'),
-            'theme_id'    => $this->request->getPost('theme_id') ?: null,
-        ];
-
-        $oldPodcast = null;
-        if ($id) {
-            $oldPodcast = $this->podcastModel->find($id);
-            $slug = $oldPodcast['slug'];
-        } else {
-            $slug = $this->generateUniqueSlug($title);
-            $podcastData['slug'] = $slug;
-            $podcastData['ffmeg_status'] = 'processing';
-            $podcastData['created_by'] = session()->get('user_id');
-            $podcastData['published_at'] = $this->request->getPost('status') === 'published' ? date('Y-m-d H:i:s') : null;
-            $podcastData['status']      = $this->request->getPost('status');
-        }
-
-        // --------------------------------------------------------------------
-        // 1. CLOUDFLARE R2: Handle Cover Image ONLY on Update
-        // --------------------------------------------------------------------
-        if ($id) {
-            $coverFile = $this->request->getFile('cover_image');
-            if ($coverFile && $coverFile->isValid()) {
-                $cloudflare = new \App\Libraries\CloudflareStorage();
-                $oldCoverUrl = $oldPodcast['cover_image_url'] ?? null;
-                
-                $coverUrl = $cloudflare->optimizeAndUpload($coverFile, 'podcasts/covers', $slug, $oldCoverUrl);
-                
-                if ($coverUrl) {
-                    $podcastData['cover_image_url'] = $coverUrl;
-                }
-                // Notice: No rollback or error response here! 
-                // If it fails, the process just continues silently.
-            }
-        }
-
-        // --------------------------------------------------------------------
-        // 2. MP3 Upload (ONLY FOR NEW PODCASTS)
-        // --------------------------------------------------------------------
-        if (!$id) {
-            $highFile = $this->request->getFile('media_high');
-            if ($highFile && $highFile->isValid() && !$highFile->hasMoved()) {
-                $vaultDir = WRITEPATH . 'uploads/vault/';
-                if (!is_dir($vaultDir)) mkdir($vaultDir, 0777, true);
-                
-                // Save it locally instantly
-                $highFile->move($vaultDir, $slug . '.mp3');
-            }
-        }
-
-        // --------------------------------------------------------------------
-        // 3. Database Updates & Job Queuing
-        // --------------------------------------------------------------------
-        if ($id) {
-            $this->podcastModel->update($id, $podcastData);
-            $podcastId = $id;
-        } else {
-            $podcastId = $this->podcastModel->insert($podcastData);
-
-            $lastJob = $db->table('media_queue')
-                          ->whereIn('status', ['pending', 'processing'])
-                          ->orderBy('start_time', 'DESC')
-                          ->get()
-                          ->getRow();
-
-            $startTime = date('Y-m-d H:i:s'); 
-
-            if ($lastJob && $lastJob->start_time) {
-                $lastJobTime = strtotime($lastJob->start_time);
-                $currentTime = time();
-                $nextAvailableTime = $lastJobTime + (20 * 60); 
-                if ($nextAvailableTime > $currentTime) {
-                    $startTime = date('Y-m-d H:i:s', $nextAvailableTime);
-                }
-            }
-            
-            $db->table('media_queue')->insert([
-                'podcast_id' => $podcastId,
-                'slug'       => $slug,
-                'status'     => 'pending',
-                'start_time' => $startTime
-            ]);
-        }
-
-        $authorModel = new \App\Models\PodcastAuthorModel();
-        if ($id) {
-            $authorModel->where('podcast_id', $id)->delete(); 
-        }
-
-        $primaryAuthorId = $this->request->getPost('primary_author_id');
-        $authorModel->insert(['podcast_id' => $podcastId, 'author_id' => $primaryAuthorId, 'is_primary' => 1, 'can_edit' => 1]);
-
-        $coAuthors = $this->request->getPost('co_authors') ?? [];
-        foreach ($coAuthors as $coAuthorId) {
-            if ($coAuthorId != $primaryAuthorId) {
-                $authorModel->insert(['podcast_id' => $podcastId, 'author_id' => $coAuthorId, 'is_primary' => 0, 'can_edit' => $this->request->getPost('co_authors_can_edit') ? 1 : 0]);
-            }
-        }
-
-        $db->transComplete();
-
-        if ($db->transStatus() === false) {
-            return $this->respondWithError('A database error occurred while saving.');
-        }
-
-        session()->setFlashdata('success', $id ? 'Podcast updated successfully!' : 'Podcast published successfully!');
-        
-        if ($this->request->isAJAX()) {
-            return $this->response->setJSON([
-                'success' => true, 
-                'redirect' => site_url('admin/podcasts'),
-                'podcast_id' => $podcastId, // Required for step 2!
-                'new_csrf' => csrf_hash()   // Required to pass the CI4 security check on step 2!
-            ]);
-        }
-        return redirect()->to('admin/podcasts');
-    }
-     public function save_old_before_removing_cover_image_from_podcast_create($id = null)
+     public function save($id = null)
     {
         $db = \Config\Database::connect();
         $db->transStart(); 
@@ -826,6 +689,18 @@ private function getWizardData()
         // 1. CLOUDFLARE R2: Handle Cover Image (For Both New & Updates)
         // --------------------------------------------------------------------
         $coverFile = $this->request->getFile('cover_image');
+        // if ($coverFile && $coverFile->isValid() && !$coverFile->hasMoved()) {
+        //     $coverUrl = $cloudflare->upload($coverFile, 'podcasts/covers');
+        //     if ($coverUrl) {
+        //         $podcastData['cover_image_url'] = $coverUrl;
+        //         if ($oldPodcast && !empty($oldPodcast['cover_image_url'])) {
+        //             $cloudflare->delete($oldPodcast['cover_image_url']);
+        //         }
+        //     } else {
+        //         $db->transRollback();
+        //         return $this->respondWithError('Failed to upload cover image to Cloudflare.');
+        //     }
+        // }
         if ($coverFile && $coverFile->isValid()) {
             
             $cloudflare = new \App\Libraries\CloudflareStorage();
@@ -850,7 +725,7 @@ private function getWizardData()
 
             // High Quality MP3 (Required)
             $highFile = $this->request->getFile('media_high');
-
+//    if ($highFile && $highFile->isValid() && !$highFile->hasMoved()) {
 
    if ($highFile && $highFile->isValid() && !$highFile->hasMoved()) {
                 $vaultDir = WRITEPATH . 'uploads/vault/';
@@ -859,7 +734,36 @@ private function getWizardData()
                 // Save it locally as slug.mp3
                 $highFile->move($vaultDir, $slug . '.mp3');
             }
-      
+        // try {
+        //     // Send the file object to our bulletproof processor
+        //     $mediaResults = $this->processAllMedia($highFile, $slug);
+            
+        //     // 1. The 100% Original, Untouched MP3 (The Vault)
+        //     $podcastData['master_high_url'] = $mediaResults['master_high'];
+            
+        //     // 2. The Compressed 64k MP3 (For data-saver downloads)
+        //     $podcastData['master_low_url']  = $mediaResults['master_low'];
+            
+        //     // 3. The 128k HLS Stream (Primary player stream)
+        //     $podcastData['media_high_url']  = $mediaResults['hls_high'];
+            
+        //     // 4. The 64k HLS Stream (Data-saver player stream)
+        //     $podcastData['media_low_url']   = $mediaResults['hls_low'];
+            
+        // } catch (\Exception $e) {
+        //     $db->transRollback();
+        //     return $this->respondWithError('Media Processing Failed: ' . $e->getMessage());
+        // }
+    // }
+
+            // Low Quality AAC/MP3 (Optional)
+            // $lowFile = $this->request->getFile('media_low');
+            // if ($lowFile && $lowFile->isValid() && !$lowFile->hasMoved()) {
+            //     $lowUrl = $cloudflare->upload($lowFile, 'podcasts/audio/low');
+            //     if ($lowUrl) {
+            //         $podcastData['media_low_url'] = $lowUrl;
+            //     }
+            // }
         }
 
         // --------------------------------------------------------------------
@@ -908,7 +812,11 @@ private function getWizardData()
                 'start_time' => $startTime
             ]);
 
-            
+            //  $db->table('media_queue')->insert([
+            //     'podcast_id' => $podcastId,
+            //     'slug'       => $slug,
+            //     'status'     => 'pending'
+            // ]);
         }
 
         $authorModel = new \App\Models\PodcastAuthorModel();

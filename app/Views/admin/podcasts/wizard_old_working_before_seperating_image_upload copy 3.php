@@ -3,7 +3,7 @@
 
 <div class="mb-6">
     <h1 class="text-2xl font-bold text-navy-900"><?= esc($title) ?></h1>
-    <p class="text-gray-500 mt-1">Complete the steps below to publish a new Podcast.</p>
+    <p class="text-gray-500 mt-1">Complete the steps below to publish a new teaching.</p>
 </div>
 
 <div x-data="{ 
@@ -52,7 +52,6 @@
     },
 
     // Robust AJAX Submitter
-   // Robust AJAX Submitter with Orchestration
     submitForm(e) {
         this.errorMessage = '';
         this.isUploading = true;
@@ -60,14 +59,8 @@
         this.uploadStatusText = 'Sending files to server...';
 
         let formData = new FormData(e.target);
-        
-        // 👉 STEP 1 ISOLATION: Pull the cover image out if this is a new podcast
-        let coverFile = formData.get('cover_image');
-        if (!this.isUpdate) {
-            formData.delete('cover_image');
-        }
-
         let xhr = new XMLHttpRequest();
+        
         xhr.open('POST', e.target.action, true);
         xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
 
@@ -75,62 +68,27 @@
             if (event.lengthComputable) {
                 this.uploadProgress = Math.round((event.loaded / event.total) * 100);
                 if(this.uploadProgress === 100) {
-                    this.uploadStatusText = this.isUpdate ? 'Syncing to Cloudflare R2... Please wait.' : 'Saving MP3 to Vault... Please wait.';
+                    this.uploadStatusText = 'Server is now syncing files to Cloudflare R2... Please wait.';
                 }
             }
         };
 
         xhr.onload = () => {
             try {
+                // We wrap this in a try/catch so if PHP sends an HTML error page, the UI doesn't freeze!
                 let response = JSON.parse(xhr.responseText);
                 
                 if (xhr.status >= 200 && xhr.status < 300 && response.success) {
-                    
-                    // 👉 THE CHAINED REQUEST: Send the cover image to the UPDATE endpoint
-                    if (!this.isUpdate && coverFile && coverFile.size > 0) {
-                        this.uploadStatusText = 'Audio secured! Uploading Cover Image...';
-                        this.uploadProgress = 0; // Reset progress bar
-
-                        let coverData = new FormData();
-                        
-                        // Pass title and category to satisfy backend validation
-                        coverData.append('title', this.title);
-                        coverData.append('category_id', this.categoryId);
-                        coverData.append('cover_image', coverFile);
-                        
-                        // Pass the new CSRF token so CodeIgniter doesn't block us
-                        coverData.append('<?= csrf_token() ?>', response.new_csrf);
-
-                        let xhrCover = new XMLHttpRequest();
-                        // Ping the exact same endpoint, but append the NEW podcast ID
-                        xhrCover.open('POST', '<?= site_url('admin/podcasts/save/') ?>' + response.podcast_id, true);
-                        xhrCover.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-                        
-                        xhrCover.onload = () => {
-                            // Regardless of if the cover succeeds or fails, we redirect!
-                            window.location.href = response.redirect;
-                        };
-                        
-                        xhrCover.onerror = () => {
-                            // Fail gracefully and redirect anyway
-                            window.location.href = response.redirect;
-                        };
-
-                        xhrCover.send(coverData);
-                    } else {
-                        // Normal update, or no cover image selected - redirect immediately
-                        window.location.href = response.redirect;
-                    }
-
+                    window.location.href = response.redirect;
                 } else {
                     this.isUploading = false;
                     this.errorMessage = response.message || 'An unknown error occurred during upload.';
-                    this.step = 2; 
+                    this.step = 2; // Kick them back to see the error
                 }
             } catch (error) {
                 this.isUploading = false;
-                console.error('Raw Server Response:', xhr.responseText); 
-                this.errorMessage = 'Server Crash: The file might be too large for your server settings, or a database error occurred.';
+                console.error('Raw Server Response:', xhr.responseText); // Log it to the browser console for debugging
+                this.errorMessage = 'Server Crash: The file might be too large for your server settings (Check php.ini), or a database error occurred.';
                 this.step = 2;
             }
         };
