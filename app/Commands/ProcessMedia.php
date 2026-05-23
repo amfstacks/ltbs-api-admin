@@ -14,6 +14,8 @@ class ProcessMedia extends BaseCommand
 
     public function run(array $params)
     {
+
+        date_default_timezone_set('Africa/Lagos');
         // 1. Unlimited time and memory for CLI processing
         set_time_limit(0); 
         ini_set('memory_limit', '2048M'); 

@@ -286,18 +286,28 @@
                     <?php endif; ?>
                 </div>
 
-               <div>
+             <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Add Co-Authors (Optional)</label>
                     
                     <select name="co_authors[]" multiple class="select2-multiple w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
+                        <?php 
+                            // Ensure we have an array (defaults to empty for new podcasts)
+                            $savedCoAuthors = $selected_co_authors ?? []; 
+                        ?>
                         <?php foreach($authors as $author): ?>
                             
                             <?php 
                                 // EXCLUDE THE CURRENT LOGGED-IN USER FROM THIS LIST
                                 if($author['id'] == session()->get('user_id')) continue; 
+                                
+                                // 👉 THE FIX: Check if this author's ID is in the array from the controller!
+                                $isSelected = in_array($author['id'], $savedCoAuthors) ? 'selected' : '';
                             ?>
                             
-                            <option value="<?= $author['id'] ?>"><?= esc($author['first_name'] . ' ' . $author['last_name']) ?></option>
+                            <!-- Add the $isSelected variable here! -->
+                            <option value="<?= $author['id'] ?>" <?= $isSelected ?>>
+                                <?= esc($author['first_name'] . ' ' . $author['last_name']) ?>
+                            </option>
                         
                         <?php endforeach; ?>
                     </select>
@@ -305,7 +315,8 @@
                 </div>
 
                 <div class="flex items-center mt-4">
-                    <input type="checkbox" name="co_authors_can_edit" value="1" class="h-4 w-4 text-gold-500 border-gray-300 rounded focus:ring-gold-500">
+                    <!-- 👉 THE FIX: Pre-check the box if the controller says they can edit! -->
+                    <input type="checkbox" name="co_authors_can_edit" value="1" <?= (isset($podcast['co_authors_can_edit']) && $podcast['co_authors_can_edit'] == 1) ? 'checked' : '' ?> class="h-4 w-4 text-gold-500 border-gray-300 rounded focus:ring-gold-500">
                     <label class="ml-2 block text-sm text-gray-700">Allow Co-Authors to edit text and categories.</label>
                 </div>
             </div>

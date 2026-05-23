@@ -281,7 +281,7 @@ private function getWizardData()
         return redirect()->to('admin/podcasts')->with('success', 'Podcast published successfully!');
     }
 
-    public function edit($id)
+    public function edit_old($id)
     {
         $podcast = $this->podcastModel->find($id);
         if (!$podcast) return redirect()->to('admin/podcasts')->with('error', 'Podcast not found.');
@@ -294,6 +294,38 @@ private function getWizardData()
         $data['title'] = 'Edit Podcast';
         $data['podcast'] = $podcast;
         $data['primary_author_id'] = $primaryAuthor ? $primaryAuthor['author_id'] : '';
+        
+        return view('admin/podcasts/wizard', $data);
+    }
+    public function edit($id)
+    {
+        $podcast = $this->podcastModel->find($id);
+        if (!$podcast) return redirect()->to('admin/podcasts')->with('error', 'Podcast not found.');
+
+        $authorModel = new \App\Models\PodcastAuthorModel();
+        
+        // 1. Get Primary Author
+        $primaryAuthor = $authorModel->where('podcast_id', $id)->where('is_primary', 1)->first();
+        
+        // 2. THE FIX: Fetch the Co-Authors!
+        $coAuthors = $authorModel->where('podcast_id', $id)->where('is_primary', 0)->findAll();
+        
+        // Extract just the author_ids into a simple, flat array (e.g., [4, 7, 9])
+        $selected_co_authors = array_column($coAuthors, 'author_id');
+        
+        // 3. Determine if the "Can Edit" checkbox was checked (we just check the first co-author's permission)
+        $coAuthorsCanEdit = (!empty($coAuthors) && $coAuthors[0]['can_edit'] == 1) ? 1 : 0;
+        
+        // Temporarily attach this to the podcast array so the view's checkbox logic works
+        $podcast['co_authors_can_edit'] = $coAuthorsCanEdit;
+        
+        $data = $this->getWizardData();
+        $data['title'] = 'Edit Podcast';
+        $data['podcast'] = $podcast;
+        $data['primary_author_id'] = $primaryAuthor ? $primaryAuthor['author_id'] : '';
+        
+        // 4. Pass the array to the view!
+        $data['selected_co_authors'] = $selected_co_authors; 
         
         return view('admin/podcasts/wizard', $data);
     }
