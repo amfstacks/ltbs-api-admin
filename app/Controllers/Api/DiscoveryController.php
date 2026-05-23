@@ -27,11 +27,20 @@ $categories = $categoryModel->select('id, name as title, slug, icon_url')
                             ->orderBy('id', 'RANDOM')
                             ->findAll(6);
 
+                            foreach ($categories as &$cat) {
+            $cat['icon_url'] = !empty($cat['icon_url']) ? media_url($cat['icon_url']) : null;
+        }
+        unset($cat);
+
 // 2. Fetch Themes (Limit to 6)
 $themeModel = new ThemeModel();
 $themes = $themeModel->select('id, name as title, slug, icon_url')
                      ->orderBy('id', 'RANDOM')
                      ->findAll(6);
+                     foreach ($themes as &$theme) {
+            $theme['icon_url'] = !empty($theme['icon_url']) ? media_url($theme['icon_url']) : null;
+        }
+        unset($theme);
 
         // 3. Fetch Featured Podcast (The absolute latest published teaching)
         // $featured = $this->getFormattedPodcasts(1, 'created_at', 'DESC');
@@ -197,6 +206,11 @@ $themes = $themeModel->select('id, name as title, slug, icon_url')
         if ($page > $pager->getPageCount()) {
             $categories = []; 
         }
+        // 👉 ADJUSTMENT: Format the Category Icon URLs
+        foreach ($categories as &$cat) {
+            $cat['icon_url'] = !empty($cat['icon_url']) ? media_url($cat['icon_url']) : null;
+        }
+        unset($cat);
 
         $payload = [
             'categories' => $categories,
@@ -235,6 +249,11 @@ $themes = $themeModel->select('id, name as title, slug, icon_url')
             $themes = []; 
         }
 
+        foreach ($themes as &$theme) {
+            $theme['icon_url'] = !empty($theme['icon_url']) ? media_url($theme['icon_url']) : null;
+        }
+        unset($theme);
+        
         $payload = [
             'themes' => $themes,
             'pagination' => [
