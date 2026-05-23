@@ -148,12 +148,13 @@ protected function getUserId()
         $authorsByPodcast = [];
         foreach ($authorsQuery as $author) {
             $pid = $author['podcast_id'];
+            $titlePrefix = !empty($author['title']) ? trim($author['title']) . ' ' : '';
             $authorsByPodcast[$pid][] = [
                 'id'        => (int)$author['id'],
-                'name'      => trim($author['first_name'] . ' ' . $author['last_name']),
+                'name'      => trim($titlePrefix . $author['first_name'] . ' ' . $author['last_name']),
                 'image_url' => media_url($author['profile_image_url']),
                 'bio'       => $author['bio'],
-                'title'       => $author['title']
+                'title'     => !empty($author['title']) ? $author['title'] : ''
             ];
         }
 

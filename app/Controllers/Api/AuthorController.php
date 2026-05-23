@@ -34,7 +34,7 @@ class AuthorController extends BaseApiController
     return [
         'user' => [
             'id'                => $author['id'],
-            'title'                => $author['title'],
+            'title'                => !empty($author['title']) ? $author['title'] : '',
             'first_name'        => $author['first_name'],
             'last_name'         => $author['last_name'] ?? '',
             'bio'               => $author['bio'],
