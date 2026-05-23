@@ -691,6 +691,7 @@ private function getWizardData()
             'description' => $this->request->getPost('description'),
             'category_id' => $this->request->getPost('category_id'),
             'theme_id'    => $this->request->getPost('theme_id') ?: null,
+            'podcast_date' => $this->request->getPost('podcast_date') ?: null,
         ];
 
         $oldPodcast = null;

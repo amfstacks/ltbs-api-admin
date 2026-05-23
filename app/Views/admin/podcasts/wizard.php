@@ -18,6 +18,7 @@
     
     // Variables
     title: '<?= isset($podcast) ? esc($podcast['title'], 'js') : '' ?>',
+    podcastDate: '<?= isset($podcast) && !empty($podcast['podcast_date']) ? esc($podcast['podcast_date'], 'js') : date('Y-m-d') ?>',
     categoryId: '<?= isset($podcast) ? $podcast['category_id'] : '' ?>',
     coverImageUrl: '<?= isset($podcast) && !empty($podcast['cover_image_url']) ? (str_starts_with($podcast['cover_image_url'], 'http') ? esc($podcast['cover_image_url'], 'js') : media_url($podcast['cover_image_url'])) : '' ?>',
     isUpdate: <?= isset($podcast) ? 'true' : 'false' ?>,
@@ -190,10 +191,14 @@
                     <label class="block text-sm font-medium text-gray-700 mb-1">Description summary</label>
                     <textarea name="description" rows="3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500"><?= isset($podcast) ? esc($podcast['description']) : '' ?></textarea>
                 </div>
-                <div class="grid grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Podcast Date </label>
+        <input type="date" name="podcast_date" x-model="podcastDate" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
+    </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Category <span class="text-red-500">*</span></label>
-                        <select name="category_id" x-model="categoryId" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
+                        <select name="category_id" x-model="categoryId" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500 select2-single">
                             <option value="">Select Category...</option>
                             <?php foreach($categories as $cat): ?>
                                 <option value="<?= $cat['id'] ?>" <?= (isset($podcast) && $podcast['category_id'] == $cat['id']) ? 'selected' : '' ?>><?= esc($cat['name']) ?></option>
@@ -202,7 +207,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Theme</label>
-                        <select name="theme_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500">
+                        <select name="theme_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-gold-500 focus:border-gold-500 select2-single">
                             <option value="">Select Theme (Optional)...</option>
                             <?php foreach($themes as $theme): ?>
                                 <option value="<?= $theme['id'] ?>" <?= (isset($podcast) && $podcast['theme_id'] == $theme['id']) ? 'selected' : '' ?>><?= esc($theme['name']) ?></option>
@@ -386,6 +391,33 @@
     0% { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
 }
+
+.select2-container--default .select2-selection--multiple {
+        border-color: #D1D5DB; 
+        border-radius: 0.5rem; 
+        min-height: 42px;
+        padding: 2px 4px;
+    }
+    .select2-container--default.select2-container--focus .select2-selection--multiple {
+        border-color: #EAB308; 
+        box-shadow: 0 0 0 1px #EAB308; 
+    }
+
+    /* Select2 Single Overrides */
+    .select2-container--default .select2-selection--single {
+        border-color: #D1D5DB; 
+        border-radius: 0.5rem; 
+        height: 42px;
+        padding: 6px 4px;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 40px;
+    }
+    .select2-container--default.select2-container--open .select2-selection--single,
+    .select2-container--default.select2-container--focus .select2-selection--single {
+        border-color: #EAB308; 
+        box-shadow: 0 0 0 1px #EAB308; 
+    }
 </style>
 
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
@@ -404,6 +436,42 @@
         border-color: #EAB308; /* focus:border-gold-500 */
         box-shadow: 0 0 0 1px #EAB308; /* focus:ring-gold-500 */
     }
+    .select2-container--default .select2-selection--multiple {
+        border-color: #D1D5DB; 
+        border-radius: 0.5rem; 
+        min-height: 42px;
+        padding: 2px 4px;
+    }
+    .select2-container--default.select2-container--focus .select2-selection--multiple {
+        border-color: #EAB308; 
+        box-shadow: 0 0 0 1px #EAB308; 
+    }
+
+    /* Select2 Single Styling Overrides to Match Tailwind */
+    .select2-container--default .select2-selection--single {
+        border-color: #D1D5DB; 
+        border-radius: 0.5rem; 
+        height: 42px; /* Matches Tailwind py-2 inputs */
+        display: flex;
+        align-items: center;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        color: #374151; /* text-gray-700 */
+        line-height: normal;
+        padding-left: 1rem; /* px-4 */
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 40px;
+        right: 8px;
+    }
+    .select2-container--default.select2-container--open .select2-selection--single,
+    .select2-container--default.select2-container--focus .select2-selection--single {
+        border-color: #EAB308; 
+        box-shadow: 0 0 0 1px #EAB308; 
+    }
+    .select2-container--default .select2-selection--single .select2-selection__placeholder {
+        color: #9CA3AF; /* text-gray-400 */
+    }
 </style>
 
 <script>
@@ -412,6 +480,19 @@
             placeholder: "Select co-authors...",
             allowClear: true,
             width: '100%'
+        });
+
+      $('.select2-single').select2({
+            placeholder: "Select an option...",
+            allowClear: true,
+            width: '100%'
+        });
+
+        // THE FIX: Tell Alpine.js whenever Select2 changes!
+        // We listen specifically to select2 events to avoid infinite loops, 
+        // and dispatch a native 'change' event which x-model is listening for.
+        $('.select2-single').on('select2:select select2:unselect select2:clear', function() {
+            this.dispatchEvent(new Event('change', { bubbles: true }));
         });
     });
 </script>

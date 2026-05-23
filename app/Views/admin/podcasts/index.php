@@ -34,7 +34,7 @@
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teaching</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Published</th>
+                    <!-- <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Published</th> -->
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Engagement</th>
                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -101,13 +101,7 @@
                             <?php endif; ?>
                         </td>
 
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <?php if($podcast['published_at']): ?>
-                                <?= date('M d, Y', strtotime($podcast['published_at'])) ?>
-                            <?php else: ?>
-                                <span class="text-gray-400 italic">Not Published</span>
-                            <?php endif; ?>
-                        </td>
+
 
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="flex items-center gap-4 text-xs font-medium text-gray-500">

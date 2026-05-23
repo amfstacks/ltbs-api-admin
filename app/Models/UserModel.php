@@ -17,7 +17,7 @@ class UserModel extends Model
         'profile_image_url',
         'is_dark_mode',
         'is_data_saver_on',
-        'push_notifications', 'avatar_url','reset_token', 'reset_expires_at','auth_type'];
+        'push_notifications', 'avatar_url','reset_token', 'reset_expires_at','auth_type','title'];
 
     // Dates
     protected $useTimestamps = true;

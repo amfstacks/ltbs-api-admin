@@ -133,6 +133,7 @@ class UserController extends BaseController
         }
 
         $saveData = [
+            'title'      => $this->request->getPost('title') ?: null,
             'first_name' => $this->request->getPost('first_name'),
             'last_name'  => $this->request->getPost('last_name'),
             'bio'        => $this->request->getPost('bio'), // WYSIWYG HTML content
@@ -166,6 +167,7 @@ class UserController extends BaseController
         $this->userModel->update($userId, $saveData);
         
         // Update session names in case they fixed a typo in their name
+        session()->set('title', $saveData['title']);
         session()->set('first_name', $saveData['first_name']);
         session()->set('last_name', $saveData['last_name']);
 
