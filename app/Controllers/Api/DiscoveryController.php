@@ -115,23 +115,26 @@ $themes = $themeModel->select('id, name as title, slug, icon_url')
     {
         $categoryModel = new CategoryModel();
         
-        // Use 12 per page because it divides perfectly for 2, 3, or 4 column grids!
         $limit = $this->request->getGet('limit') ?? 12; 
+        
+        // 👉 THE FIX: Explicitly grab the page number from the request (defaults to 1)
+        $page = $this->request->getGet('page') ?? 1; 
 
         $categories = $categoryModel->select('categories.id, categories.name as title, categories.slug, categories.icon_url, COUNT(podcasts.id) as podcastCount')
             ->join('podcasts', 'podcasts.category_id = categories.id AND podcasts.status = "published"', 'left')
             ->groupBy('categories.id')
             ->orderBy('categories.name', 'ASC')
-            ->paginate($limit);
+            // 👉 Force CodeIgniter to use the explicit page number (Parameter 3)
+            ->paginate($limit, 'default', $page);
 
         $pager = $categoryModel->pager;
 
         $payload = [
             'categories' => $categories,
             'pagination' => [
-                'current_page' => $pager->getCurrentPage(),
-                'total_pages'  => $pager->getPageCount(),
-                'total_items'  => $pager->getTotal(),
+                'current_page' => (int) $pager->getCurrentPage(),
+                'total_pages'  => (int) $pager->getPageCount(),
+                'total_items'  => (int) $pager->getTotal(),
                 'has_more'     => $pager->getCurrentPage() < $pager->getPageCount()
             ]
         ];
