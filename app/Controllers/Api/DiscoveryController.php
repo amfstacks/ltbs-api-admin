@@ -111,31 +111,100 @@ $themes = $themeModel->select('id, name as title, slug, icon_url')
      * GET /api/v1/discovery/categories
      * Fetches paginated categories with their podcast counts
      */
+    // public function categories()
+    // {
+    //     $categoryModel = new CategoryModel();
+        
+    //     $limit = $this->request->getGet('limit') ?? 12; 
+        
+    //     // 👉 THE FIX: Explicitly grab the page number from the request (defaults to 1)
+    //     $page = $this->request->getGet('page') ?? 1; 
+
+    //     $categories = $categoryModel->select('categories.id, categories.name as title, categories.slug, categories.icon_url, COUNT(podcasts.id) as podcastCount')
+    //         ->join('podcasts', 'podcasts.category_id = categories.id AND podcasts.status = "published"', 'left')
+    //         ->groupBy('categories.id')
+    //         ->orderBy('categories.name', 'ASC')
+    //         // 👉 Force CodeIgniter to use the explicit page number (Parameter 3)
+    //         ->paginate($limit, 'default', $page);
+
+    //     $pager = $categoryModel->pager;
+
+    //     $payload = [
+    //         'categories' => $categories,
+    //         'pagination' => [
+    //             'current_page' => (int) $pager->getCurrentPage(),
+    //             'total_pages'  => (int) $pager->getPageCount(),
+    //             'total_items'  => (int) $pager->getTotal(),
+    //             'has_more'     => $pager->getCurrentPage() < $pager->getPageCount()
+    //         ]
+    //     ];
+
+    //     return $this->sendSuccess($payload, 'Categories retrieved successfully');
+    // }
+
+    // /**
+    //  * GET /api/v1/discovery/themes
+    //  * Fetches paginated themes with their podcast counts
+    //  */
+    // public function themes()
+    // {
+    //     $themeModel = new ThemeModel();
+        
+    //     $limit = $this->request->getGet('limit') ?? 12;
+
+    //     $themes = $themeModel->select('themes.id, themes.name as title, themes.slug, themes.icon_url, COUNT(podcasts.id) as podcastCount')
+    //         ->join('podcasts', 'podcasts.theme_id = themes.id AND podcasts.status = "published"', 'left')
+    //         ->groupBy('themes.id')
+    //         ->orderBy('themes.name', 'ASC')
+    //         ->paginate($limit);
+
+    //     $pager = $themeModel->pager;
+
+    //     $payload = [
+    //         'themes' => $themes,
+    //         'pagination' => [
+    //             'current_page' => $pager->getCurrentPage(),
+    //             'total_pages'  => $pager->getPageCount(),
+    //             'total_items'  => $pager->getTotal(),
+    //             'has_more'     => $pager->getCurrentPage() < $pager->getPageCount()
+    //         ]
+    //     ];
+
+    //     return $this->sendSuccess($payload, 'Themes retrieved successfully');
+    // }
+
+
+    /**
+     * GET /api/v1/discovery/categories
+     * Fetches paginated categories with their podcast counts
+     */
     public function categories()
     {
         $categoryModel = new CategoryModel();
         
-        $limit = $this->request->getGet('limit') ?? 12; 
-        
-        // 👉 THE FIX: Explicitly grab the page number from the request (defaults to 1)
-        $page = $this->request->getGet('page') ?? 1; 
+        $limit = (int) ($this->request->getVar('limit') ?? 12); 
+        $page  = (int) ($this->request->getVar('page') ?? 1); 
 
         $categories = $categoryModel->select('categories.id, categories.name as title, categories.slug, categories.icon_url, COUNT(podcasts.id) as podcastCount')
             ->join('podcasts', 'podcasts.category_id = categories.id AND podcasts.status = "published"', 'left')
             ->groupBy('categories.id')
             ->orderBy('categories.name', 'ASC')
-            // 👉 Force CodeIgniter to use the explicit page number (Parameter 3)
             ->paginate($limit, 'default', $page);
 
         $pager = $categoryModel->pager;
 
+        // 👉 THE FIX: Prevent CodeIgniter from repeating the last page
+        if ($page > $pager->getPageCount()) {
+            $categories = []; 
+        }
+
         $payload = [
             'categories' => $categories,
             'pagination' => [
-                'current_page' => (int) $pager->getCurrentPage(),
-                'total_pages'  => (int) $pager->getPageCount(),
-                'total_items'  => (int) $pager->getTotal(),
-                'has_more'     => $pager->getCurrentPage() < $pager->getPageCount()
+                'current_page' => $pager->getCurrentPage(),
+                'total_pages'  => $pager->getPageCount(),
+                'total_items'  => $pager->getTotal(),
+                'has_more'     => $page < $pager->getPageCount() // Safer check using requested $page
             ]
         ];
 
@@ -150,15 +219,21 @@ $themes = $themeModel->select('id, name as title, slug, icon_url')
     {
         $themeModel = new ThemeModel();
         
-        $limit = $this->request->getGet('limit') ?? 12;
+        $limit = (int) ($this->request->getVar('limit') ?? 12);
+        $page  = (int) ($this->request->getVar('page') ?? 1);
 
         $themes = $themeModel->select('themes.id, themes.name as title, themes.slug, themes.icon_url, COUNT(podcasts.id) as podcastCount')
             ->join('podcasts', 'podcasts.theme_id = themes.id AND podcasts.status = "published"', 'left')
             ->groupBy('themes.id')
             ->orderBy('themes.name', 'ASC')
-            ->paginate($limit);
+            ->paginate($limit, 'default', $page);
 
         $pager = $themeModel->pager;
+
+        // 👉 THE FIX: Prevent CodeIgniter from repeating the last page
+        if ($page > $pager->getPageCount()) {
+            $themes = []; 
+        }
 
         $payload = [
             'themes' => $themes,
@@ -166,13 +241,12 @@ $themes = $themeModel->select('id, name as title, slug, icon_url')
                 'current_page' => $pager->getCurrentPage(),
                 'total_pages'  => $pager->getPageCount(),
                 'total_items'  => $pager->getTotal(),
-                'has_more'     => $pager->getCurrentPage() < $pager->getPageCount()
+                'has_more'     => $page < $pager->getPageCount() // Safer check using requested $page
             ]
         ];
 
         return $this->sendSuccess($payload, 'Themes retrieved successfully');
     }
-
     /**
      * POST /api/v1/discovery/check-version
      * Intercepts Android platform binaries to enforce kill-switch expirations aa
