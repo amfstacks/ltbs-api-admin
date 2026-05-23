@@ -152,7 +152,8 @@ protected function getUserId()
                 'id'        => (int)$author['id'],
                 'name'      => trim($author['first_name'] . ' ' . $author['last_name']),
                 'image_url' => media_url($author['profile_image_url']),
-                'bio'       => $author['bio']
+                'bio'       => $author['bio'],
+                'title'       => $author['title']
             ];
         }
 
