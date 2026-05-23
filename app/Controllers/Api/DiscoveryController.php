@@ -34,12 +34,14 @@ $themes = $themeModel->select('id, name as title, slug, icon_url')
                      ->findAll(6);
 
         // 3. Fetch Featured Podcast (The absolute latest published teaching)
-        $featured = $this->getFormattedPodcasts(1, 'created_at', 'DESC');
+        // $featured = $this->getFormattedPodcasts(1, 'created_at', 'DESC');
+        // $featured = $this->getFormattedPodcasts(1, 'featured DESC, created_at', 'DESC');
+        $featured = $this->getFormattedPodcasts(1, 'featured DESC, podcasts.created_at', 'DESC');
 
         // 4. Fetch Recent Teachings (Next 10 latest, excluding the featured one)
         // If there's no featured, just get 10. If there is, skip the first one using offset(1)
         $recentOffset = !empty($featured) ? 1 : 0;
-        $recent = $this->getFormattedPodcasts(10, 'created_at', 'DESC', $recentOffset);
+        $recent = $this->getFormattedPodcasts(11, 'created_at', 'DESC', 0);
 
         // 5. Fetch Most Listened (Top 10 highest play_count)
         $popular = $this->getFormattedPodcasts(10, 'play_count', 'DESC');

@@ -138,7 +138,7 @@ protected function getUserId()
         
         // 2. Fetch ALL authors for these podcasts in one fast query
         $authorsQuery = $db->table('podcast_authors')
-            ->select('podcast_authors.podcast_id, users.id, users.first_name, users.last_name, users.profile_image_url, users.bio')
+            ->select('podcast_authors.podcast_id,users.title, users.id, users.first_name, users.last_name, users.profile_image_url, users.bio')
             ->join('users', 'users.id = podcast_authors.author_id')
             ->whereIn('podcast_authors.podcast_id', $podcastIds)
             ->orderBy('podcast_authors.is_primary', 'DESC')
@@ -151,7 +151,7 @@ protected function getUserId()
             $authorsByPodcast[$pid][] = [
                 'id'        => (int)$author['id'],
                 'name'      => trim($author['first_name'] . ' ' . $author['last_name']),
-                'image_url' => $author['profile_image_url'],
+                'image_url' => media_url($author['profile_image_url']),
                 'bio'       => $author['bio']
             ];
         }
